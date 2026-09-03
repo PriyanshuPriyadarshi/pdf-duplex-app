@@ -1,3 +1,7 @@
+"""
+src/settings_dialog.py - Global application settings modal.
+"""
+
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QPushButton, QDialogButtonBox
 from PyQt6.QtCore import Qt, QSettings
 from PyQt6.QtGui import QPalette, QColor

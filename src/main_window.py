@@ -30,7 +30,6 @@ from src.center_preview import CenterPreview
 from src.settings_panel import SettingsPanel
 from src import imposer
 from src import utils
-from src.utils import print_pdf, show_flip_prompt
 
 
 class _ModeComboAdapter:
@@ -57,7 +56,9 @@ class MainWindow(QMainWindow):
 
         self.pdf_doc = QPdfDocument(self)
         self.current_file_path = ""
+        self.current_pdf_bytes: bytes = b""
         self.total_pages = 0
+        self.selected_page_indices = None
         self.current_theme = "dark"
 
         self._setup_ui()
@@ -86,6 +87,25 @@ class MainWindow(QMainWindow):
             print_pdf(p1, is_duplex=False)
             if show_flip_prompt(self):
                 print_pdf(p2, is_duplex=False)
+
+    def handle_print(self):
+        """Handle print action from menu or keyboard shortcut."""
+        self.print_document()
+
+    def print_pdf(self, pdf_bytes: bytes, is_duplex: bool = False) -> None:
+        """Print the given PDF bytes using the system's lp command.
+        This function is provided for backward compatibility with tests.
+        """
+        from src import utils
+        utils.print_pdf(pdf_bytes, is_duplex)
+
+    def show_flip_prompt(self, parent=None) -> bool:
+        """Show a message box asking the user to flip the stack and reinsert.
+        Returns True if user clicked OK, False if cancelled.
+        This function is provided for backward compatibility with tests.
+        """
+        from src import utils
+        return utils.show_flip_prompt(parent)
 
     def _setup_ui(self):
         # 1. Main Three-Panel Layout via QSplitter (spans full window height)
@@ -140,8 +160,12 @@ class MainWindow(QMainWindow):
         self.settings_panel.options_changed.connect(self._on_options_changed)
 
         # Action Buttons
-        self.settings_panel.print_clicked.connect(self.handle_print)
+        self.settings_panel.btn_open_normal.clicked.connect(self.handle_open_normal)
+        self.settings_panel.btn_open_fronts.clicked.connect(self.handle_open_fronts)
+        self.settings_panel.btn_open_backs.clicked.connect(self.handle_open_backs)
         self.settings_panel.export_clicked.connect(self.handle_export)
+        self.settings_panel.open_settings_clicked.connect(self.open_settings_dialog)
+        self.sidebar.page_range_changed.connect(self.handle_page_range_changed)
 
     def _setup_shortcuts(self):
         open_action = QAction("Open", self)
@@ -169,6 +193,50 @@ class MainWindow(QMainWindow):
         self.current_theme = "dark"
         apply_theme(app, "dark")
 
+    def open_settings_dialog(self):
+        """Open the settings dialog."""
+        from src.settings_dialog import SettingsDialog
+        dlg = SettingsDialog(self)
+        dlg.exec()
+
+    def handle_page_range_changed(self, range_str: str):
+        """Handle page range changes from the sidebar."""
+        if not self.pdf_doc or self.total_pages == 0:
+            return
+
+        from src import utils
+        if not range_str.strip():
+            self.selected_page_indices = None
+            self.status_bar.showMessage(f"All {self.total_pages} pages included")
+        else:
+            try:
+                self.selected_page_indices = utils.parse_page_range(range_str, self.total_pages)
+                count = len(self.selected_page_indices)
+                self.status_bar.showMessage(f"Custom range selected: {count} of {self.total_pages} pages")
+            except Exception:
+                self.selected_page_indices = None
+
+    def _get_effective_pdf_path(self) -> tuple[str, bool]:
+        """Return path to PDF to impose, and a boolean indicating if it is a temporary sliced file."""
+        if not self.selected_page_indices or len(self.selected_page_indices) == self.total_pages:
+            return self.current_file_path, False
+
+        from pypdf import PdfReader, PdfWriter
+        import tempfile
+        try:
+            reader = PdfReader(self.current_file_path)
+            writer = PdfWriter()
+            for idx in self.selected_page_indices:
+                if 0 <= idx < len(reader.pages):
+                    writer.add_page(reader.pages[idx])
+
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+            writer.write(tmp)
+            tmp.close()
+            return tmp.name, True
+        except Exception:
+            return self.current_file_path, False
+
     def open_file_dialog(self):
         file_path, _ = QFileDialog.getOpenFileName(
             self, "Open PDF Document", "", "PDF Files (*.pdf)"
@@ -184,6 +252,11 @@ class MainWindow(QMainWindow):
         self.pdf_doc.load(path)
         self.total_pages = self.pdf_doc.pageCount()
         self.current_file_path = path
+        try:
+            with open(path, "rb") as f:
+                self.current_pdf_bytes = f.read()
+        except OSError:
+            self.current_pdf_bytes = b""
 
         filename = os.path.basename(path)
         size_kb = os.path.getsize(path) / 1024
@@ -214,26 +287,83 @@ class MainWindow(QMainWindow):
                 # Scroll to the card
                 self.sidebar.scroll_area.ensureWidgetVisible(card)
                 break
+    def handle_open_normal(self):
+        if not self.current_file_path or not self.current_pdf_bytes: return
+        self._open_in_viewer("imposed_normal.pdf", self._generate_normal_bytes())
 
-    def handle_print(self):
-        if not self.current_file_path or self.total_pages == 0:
-            QMessageBox.warning(self, "No Document", "Please open a PDF file before printing.")
-            return
-
-        from src.print_wizard import PrintWizardDialog
-        settings = self.settings_panel.get_settings()
+    def handle_open_fronts(self):
+        if not self.current_file_path or not self.current_pdf_bytes: return
+        pass1, _ = self._generate_split_bytes()
+        self._open_in_viewer("imposed_fronts.pdf", pass1)
         
-        # Inject per-page inversion set
-        inverted_pages = self.sidebar.get_inverted_pages()
-        if inverted_pages:
-            settings["invert_colors"] = inverted_pages
+        # Show animation and back button
+        self.settings_panel.anim_widget.setVisible(True)
+        self.settings_panel.btn_open_backs.setVisible(True)
+
+    def handle_open_backs(self):
+        if not self.current_file_path or not self.current_pdf_bytes: return
+        _, pass2 = self._generate_split_bytes()
+        self._open_in_viewer("imposed_backs.pdf", pass2)
+
+    def _open_in_viewer(self, filename: str, pdf_bytes: bytes):
+        import tempfile, os
+        from PyQt6.QtGui import QDesktopServices
+        from PyQt6.QtCore import QUrl
+        
+        tmp_dir = tempfile.gettempdir()
+        file_path = os.path.join(tmp_dir, filename)
+        with open(file_path, "wb") as f:
+            f.write(pdf_bytes)
             
-        wizard = PrintWizardDialog(
-            pdf_path=self.current_file_path,
-            settings=settings,
-            parent=self,
-        )
-        wizard.exec()
+        QDesktopServices.openUrl(QUrl.fromLocalFile(file_path))
+
+    def _generate_normal_bytes(self) -> bytes:
+        from src import imposer
+        settings = self.settings_panel.get_settings()
+        invert = self.sidebar.get_inverted_pages() or False
+        pdf_path, is_temp = self._get_effective_pdf_path()
+        try:
+            return imposer.impose_normal(
+                pdf_path,
+                invert=invert,
+                print_page_numbers=settings.get("print_page_numbers", False),
+                page_number_pos=settings.get("page_number_pos", "Bottom Right"),
+            )
+        finally:
+            if is_temp:
+                try:
+                    os.unlink(pdf_path)
+                except OSError:
+                    pass
+
+    def _generate_split_bytes(self) -> tuple[bytes, bytes]:
+        from src import imposer
+        settings = self.settings_panel.get_settings()
+        mode = settings.get("mode", "Normal")
+        invert = self.sidebar.get_inverted_pages() or False
+        pdf_path, is_temp = self._get_effective_pdf_path()
+        try:
+            if mode == "Booklet":
+                pass1, pass2 = imposer.get_booklet_passes(
+                    pdf_path, reverse_backs=False, invert=invert
+                )
+            else:
+                pass1, pass2 = imposer.get_duplex_passes(
+                    pdf_path, reverse_backs=False, invert=invert
+                )
+
+            if settings.get("print_page_numbers", False):
+                pos = settings.get("page_number_pos", "Bottom Right")
+                pass1 = imposer._stamp_page_numbers(pass1, pos)
+                pass2 = imposer._stamp_page_numbers(pass2, pos)
+
+            return pass1, pass2
+        finally:
+            if is_temp:
+                try:
+                    os.unlink(pdf_path)
+                except OSError:
+                    pass
 
     def handle_export(self):
         if not self.current_file_path or self.total_pages == 0:
@@ -266,27 +396,35 @@ class MainWindow(QMainWindow):
             print_page_numbers = settings.get("print_page_numbers", False)
             page_number_pos = settings.get("page_number_pos", "Bottom Right")
 
-            if mode == "Booklet":
-                pdf_bytes = imposer.impose_booklet(
-                    self.current_file_path,
-                    invert=invert,
-                    print_page_numbers=print_page_numbers,
-                    page_number_pos=page_number_pos
-                )
-            elif mode == "Manual Duplex":
-                pdf_bytes = imposer.impose_duplex_combined(
-                    self.current_file_path,
-                    invert=invert,
-                    print_page_numbers=print_page_numbers,
-                    page_number_pos=page_number_pos
-                )
-            else:
-                pdf_bytes = imposer.impose_normal(
-                    self.current_file_path,
-                    invert=invert,
-                    print_page_numbers=print_page_numbers,
-                    page_number_pos=page_number_pos
-                )
+            pdf_path, is_temp = self._get_effective_pdf_path()
+            try:
+                if mode == "Booklet":
+                    pdf_bytes = imposer.impose_booklet(
+                        pdf_path,
+                        invert=invert,
+                        print_page_numbers=print_page_numbers,
+                        page_number_pos=page_number_pos,
+                    )
+                elif mode == "Manual Duplex":
+                    pdf_bytes = imposer.impose_duplex_combined(
+                        pdf_path,
+                        invert=invert,
+                        print_page_numbers=print_page_numbers,
+                        page_number_pos=page_number_pos,
+                    )
+                else:
+                    pdf_bytes = imposer.impose_normal(
+                        pdf_path,
+                        invert=invert,
+                        print_page_numbers=print_page_numbers,
+                        page_number_pos=page_number_pos,
+                    )
+            finally:
+                if is_temp:
+                    try:
+                        os.unlink(pdf_path)
+                    except OSError:
+                        pass
 
             with open(save_path, "wb") as f:
                 f.write(pdf_bytes)
@@ -335,3 +473,16 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# Module-level functions for backward compatibility with tests
+def print_pdf(pdf_bytes: bytes, is_duplex: bool = False) -> None:
+    """Module-level print function for test patching compatibility."""
+    from src import utils
+    utils.print_pdf(pdf_bytes, is_duplex)
+
+
+def show_flip_prompt(parent=None) -> bool:
+    """Module-level flip prompt function for test patching compatibility."""
+    from src import utils
+    return utils.show_flip_prompt(parent)

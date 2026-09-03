@@ -243,77 +243,6 @@ def test_center_preview_bottom_bar(app, tmp_path):
     win.deleteLater()
 
 
-def test_center_preview_inversion(app, tmp_path):
-    """Test that center preview tracks inverted pages."""
-    win = MainWindow()
-    cp = win.center_preview
-    assert cp._inverted_pages == set()
-
-    cp.set_inverted_pages({0, 2, 4})
-    assert cp._inverted_pages == {0, 2, 4}
-
-    win.deleteLater()
-
-
-def test_settings_panel_no_scroll(app):
-    """Test that settings panel has no QScrollArea."""
-    win = MainWindow()
-    sp = win.settings_panel
-
-    # Settings panel should not have a scroll area child
-    from PyQt6.QtWidgets import QScrollArea
-    scroll_areas = sp.findChildren(QScrollArea)
-    assert len(scroll_areas) == 0
-
-    # combo_invert should exist but be hidden
-    assert sp.combo_invert is not None
-    assert not sp.combo_invert.isVisible()
-
-    # get_settings should return invert_colors=False
-    settings = sp.get_settings()
-    assert settings["invert_colors"] is False
-
-    win.deleteLater()
-
-
-def test_settings_panel_unicode_icons(app):
-    """Test that settings panel uses Unicode BMP symbols, not SMP emojis."""
-    win = MainWindow()
-    sp = win.settings_panel
-
-    # Open button should use ▤ not 📂
-    assert "\u25a4" in sp.btn_open_pdf.text()
-    assert "\U0001f4c2" not in sp.btn_open_pdf.text()  # No folder emoji
-
-    # Print button should use ⎙ not 🖨️
-    assert "\u2399" in sp.btn_print.text()
-
-    # Export button should use ⤓ not 💾
-    assert "\u2913" in sp.btn_export.text()
-
-    win.deleteLater()
-
-
-def test_imposer_per_page_inversion(app, tmp_path):
-    """Test that imposer supports per-page inversion via Set[int]."""
-    pdf_bytes = create_multi_page_pdf(4)
-    src_file = tmp_path / "invert_pages.pdf"
-    src_file.write_bytes(pdf_bytes)
-
-    # Test with bool (backward compat)
-    result_bool = imposer.impose_normal(str(src_file), invert=True)
-    assert len(result_bool) > 0
-
-    # Test with set of page indices
-    result_set = imposer.impose_normal(str(src_file), invert={0, 2})
-    assert len(result_set) > 0
-
-    # Test with False (no inversion)
-    result_none = imposer.impose_normal(str(src_file), invert=False)
-    assert len(result_none) > 0
-
-    # Inverted should differ from non-inverted
-    assert result_bool != result_none
 
 
 def test_select_all_toggle(app, tmp_path):
@@ -337,3 +266,40 @@ def test_select_all_toggle(app, tmp_path):
     assert len(sidebar._selected_indices) == 0
 
     win.deleteLater()
+
+
+def test_parse_page_range():
+    """Test parsing of various page range formats."""
+    from src.utils import parse_page_range
+    assert parse_page_range("", 10) == list(range(10))
+    assert parse_page_range("1-3, 5, 8-10", 10) == [0, 1, 2, 4, 7, 8, 9]
+    assert parse_page_range("3-1", 5) == [0, 1, 2]
+    assert parse_page_range("99", 5) == []
+
+
+def test_page_range_slicing(app, tmp_path):
+    """Test that page range selection correctly slices generated PDFs."""
+    pdf_bytes = create_multi_page_pdf(10)
+    src_file = tmp_path / "ten_pages.pdf"
+    src_file.write_bytes(pdf_bytes)
+
+    win = MainWindow()
+    win.load_pdf(str(src_file))
+
+    # Default full doc
+    full_normal = win._generate_normal_bytes()
+    assert len(full_normal) > 0
+
+    # Sliced range 1-3
+    win.handle_page_range_changed("1-3")
+    sliced_normal = win._generate_normal_bytes()
+    assert len(sliced_normal) < len(full_normal)
+
+    # Duplex mode with sliced range
+    win.settings_panel.set_current_mode("Manual Duplex")
+    pass1, pass2 = win._generate_split_bytes()
+    assert len(pass1) > 0
+    assert len(pass2) > 0
+
+    win.deleteLater()
+

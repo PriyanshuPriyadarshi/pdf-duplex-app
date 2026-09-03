@@ -128,7 +128,11 @@ def _stamp_page_numbers(pdf_bytes: bytes, position: str) -> bytes:
     return out_io.getvalue()
 
 def impose_normal(
-input_path: str, invert: Union[bool, Set[int]] = False) -> bytes:
+    input_path: str,
+    invert: Union[bool, Set[int]] = False,
+    print_page_numbers: bool = False,
+    page_number_pos: str = "Bottom Right",
+) -> bytes:
     """Return a 1-up PDF copy of the input document, optionally inverted."""
     with open(input_path, "rb") as f:
         data = f.read()
@@ -138,6 +142,10 @@ input_path: str, invert: Union[bool, Set[int]] = False) -> bytes:
             data = _invert_pdf_bytes(data, page_indices=invert)
         else:
             data = _invert_pdf_bytes(data)
+
+    if print_page_numbers:
+        data = _stamp_page_numbers(data, position=page_number_pos)
+
     return data
 
 
@@ -193,6 +201,8 @@ def impose_duplex_combined(
     input_path: str,
     reverse_backs: bool = False,
     invert: Union[bool, Set[int]] = False,
+    print_page_numbers: bool = False,
+    page_number_pos: str = "Bottom Right",
 ) -> bytes:
     """Return a single PDF with Pass 1 (Fronts) followed by Pass 2 (Backs)."""
     front_bytes, back_bytes = get_duplex_passes(input_path, reverse_backs, invert=False)
@@ -215,12 +225,26 @@ def impose_duplex_combined(
         else:
             data = _invert_pdf_bytes(data)
 
+    if print_page_numbers:
+        data = _stamp_page_numbers(data, position=page_number_pos)
+
     return data
 
 
-def impose_duplex(input_path: str, invert: Union[bool, Set[int]] = False) -> bytes:
+def impose_duplex(
+    input_path: str,
+    invert: Union[bool, Set[int]] = False,
+    print_page_numbers: bool = False,
+    page_number_pos: str = "Bottom Right",
+) -> bytes:
     """Alias for backwards compatibility: returns combined duplex PDF."""
-    return impose_duplex_combined(input_path, reverse_backs=False, invert=invert)
+    return impose_duplex_combined(
+        input_path,
+        reverse_backs=False,
+        invert=invert,
+        print_page_numbers=print_page_numbers,
+        page_number_pos=page_number_pos,
+    )
 
 
 def get_booklet_passes(
@@ -324,7 +348,12 @@ def get_booklet_passes(
 impose_booklet_passes = get_booklet_passes
 
 
-def impose_booklet(input_path: str, invert: Union[bool, Set[int]] = False) -> bytes:
+def impose_booklet(
+    input_path: str,
+    invert: Union[bool, Set[int]] = False,
+    print_page_numbers: bool = False,
+    page_number_pos: str = "Bottom Right",
+) -> bytes:
     """
     Generate a complete booklet PDF with interleaved Front and Back sheets:
     Sheet 0 Front, Sheet 0 Back, Sheet 1 Front, Sheet 1 Back...
@@ -388,5 +417,8 @@ def impose_booklet(input_path: str, invert: Union[bool, Set[int]] = False) -> by
             data = _invert_pdf_bytes(data, page_indices=invert)
         else:
             data = _invert_pdf_bytes(data)
+
+    if print_page_numbers:
+        data = _stamp_page_numbers(data, position=page_number_pos)
 
     return data

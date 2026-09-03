@@ -18,6 +18,9 @@ from PyQt6.QtWidgets import (
     QScrollArea,
     QFrame,
     QPushButton,
+    QRadioButton,
+    QLineEdit,
+    QButtonGroup,
 )
 from PyQt6.QtGui import QPixmap, QPainter, QColor, QFont, QPen, QImage
 from PyQt6.QtCore import Qt, pyqtSignal, QSize
@@ -171,7 +174,8 @@ class SidebarPageList(QWidget):
     Supports multi-selection, per-page inversion, and page number watermarks.
     """
     card_selected = pyqtSignal(int, bool)  # sheet_idx, is_back
-    inversion_changed = pyqtSignal(set)  # set of inverted 0-based page indices
+    inversion_changed = pyqtSignal(set)
+    page_range_changed = pyqtSignal(str)  # set of inverted 0-based page indices
 
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
@@ -206,6 +210,36 @@ class SidebarPageList(QWidget):
         header_layout.addWidget(self.count_badge)
 
         main_layout.addLayout(header_layout)
+
+        # Page Selection Box
+        range_box = QWidget()
+        range_layout = QVBoxLayout(range_box)
+        range_layout.setContentsMargins(0, 0, 0, 4)
+        range_layout.setSpacing(4)
+
+        self.btn_group_range = QButtonGroup(self)
+        self.radio_all_pages = QRadioButton("All Pages")
+        self.radio_all_pages.setChecked(True)
+        self.btn_group_range.addButton(self.radio_all_pages, 0)
+
+        range_row = QHBoxLayout()
+        range_row.setSpacing(6)
+        self.radio_custom_range = QRadioButton("Range:")
+        self.btn_group_range.addButton(self.radio_custom_range, 1)
+        self.line_custom_range = QLineEdit()
+        self.line_custom_range.setPlaceholderText("e.g. 1-5, 8")
+        self.line_custom_range.setFixedHeight(26)
+        self.line_custom_range.setEnabled(False)
+        range_row.addWidget(self.radio_custom_range)
+        range_row.addWidget(self.line_custom_range)
+
+        self.radio_all_pages.toggled.connect(self._on_range_mode_toggled)
+        self.radio_custom_range.toggled.connect(self._on_range_mode_toggled)
+        self.line_custom_range.textChanged.connect(self._on_range_changed)
+
+        range_layout.addWidget(self.radio_all_pages)
+        range_layout.addLayout(range_row)
+        main_layout.addWidget(range_box)
 
         # Scroll Area for Cards
         self.scroll_area = QScrollArea(self)
@@ -274,6 +308,19 @@ class SidebarPageList(QWidget):
                 event.accept()
                 return
         super().keyPressEvent(event)
+
+    def _on_range_mode_toggled(self):
+        is_custom = self.radio_custom_range.isChecked()
+        self.line_custom_range.setEnabled(is_custom)
+        if is_custom:
+            self.line_custom_range.setFocus()
+        self._on_range_changed()
+
+    def _on_range_changed(self):
+        if self.radio_all_pages.isChecked():
+            self.page_range_changed.emit("")
+        else:
+            self.page_range_changed.emit(self.line_custom_range.text())
 
     def set_document(self, doc: Optional[QPdfDocument]):
         self._doc = doc

@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QSpinBox,
     QPushButton,
-    QGroupBox,
+    QGroupBox, QScrollArea,
     QFrame,
 )
 from PyQt6.QtGui import QFont
@@ -29,6 +29,7 @@ class SettingsPanel(QWidget):
     options_changed = pyqtSignal(dict)
     print_clicked = pyqtSignal()
     export_clicked = pyqtSignal()
+    open_settings_clicked = pyqtSignal()
 
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
@@ -40,9 +41,26 @@ class SettingsPanel(QWidget):
         self._connect_signals()
 
     def _setup_ui(self):
-        layout = QVBoxLayout(self)
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        
+        content_widget = QWidget(scroll)
+        layout = QVBoxLayout(content_widget)
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(10)
+
+        # Top Header (Settings)
+        header_layout = QHBoxLayout()
+        header_layout.addStretch()
+        self.btn_app_settings = QPushButton("⚙ Settings")
+        self.btn_app_settings.setFixedWidth(90)
+        self.btn_app_settings.clicked.connect(self.open_settings_clicked.emit)
+        header_layout.addWidget(self.btn_app_settings)
+        layout.addLayout(header_layout)
 
         # 0. Document & File Section
         doc_box = QGroupBox("DOCUMENT")
@@ -50,7 +68,7 @@ class SettingsPanel(QWidget):
         doc_layout.setSpacing(6)
         doc_layout.setContentsMargins(8, 16, 8, 8)
 
-        self.btn_open_pdf = QPushButton("\u25a4  Open PDF Document...")
+        self.btn_open_pdf = QPushButton("▤  Open PDF Document...")
         self.btn_open_pdf.setObjectName("primaryButton")
         self.btn_open_pdf.setFixedHeight(32)
         doc_layout.addWidget(self.btn_open_pdf)
@@ -87,69 +105,86 @@ class SettingsPanel(QWidget):
         mode_layout.addWidget(self.radio_booklet)
         layout.addWidget(mode_box)
 
-        # 2. Duplex / Booklet Options Section
-        self.duplex_box = QGroupBox("DUPLEX & BINDING")
-        duplex_layout = QVBoxLayout(self.duplex_box)
-        duplex_layout.setSpacing(6)
-        duplex_layout.setContentsMargins(8, 16, 8, 8)
+        # Page Numbers
+        self.group_page_num = QGroupBox("PAGE NUMBERS")
+        page_num_layout = QVBoxLayout(self.group_page_num)
+        page_num_layout.setContentsMargins(8, 16, 8, 8)
+        page_num_layout.setSpacing(10)
 
-        self.combo_flip = QComboBox()
-        self.combo_flip.addItems(["Long-Edge (Standard Book)", "Short-Edge (Calendar / Pad)"])
-        duplex_layout.addWidget(self.combo_flip)
+        self.check_page_numbers = QCheckBox("Add Page Numbers to PDF")
+        self.check_page_numbers.setChecked(False)
+        self.check_page_numbers.stateChanged.connect(lambda: self.settings_changed.emit() if hasattr(self, "settings_changed") else self.options_changed.emit(self.get_settings()))
+        page_num_layout.addWidget(self.check_page_numbers)
 
-        self.chk_reverse_backs = QCheckBox("Reverse Back Pages (Pass 2)")
-        self.chk_reverse_backs.setToolTip(
-            "Enable if your printer ejects pages face-up, so they end up in reverse order."
-        )
-        duplex_layout.addWidget(self.chk_reverse_backs)
+        pos_layout = QHBoxLayout()
+        pos_layout.addWidget(QLabel("Position:"))
+        self.combo_page_num_pos = QComboBox()
+        self.combo_page_num_pos.addItems([
+            "Bottom Right", "Bottom Center", "Bottom Left",
+            "Top Right", "Top Center", "Top Left"
+        ])
+        self.combo_page_num_pos.currentIndexChanged.connect(lambda: self.settings_changed.emit() if hasattr(self, "settings_changed") else self.options_changed.emit(self.get_settings()))
+        pos_layout.addWidget(self.combo_page_num_pos)
+        page_num_layout.addLayout(pos_layout)
+        
+        layout.addWidget(self.group_page_num)
 
-        layout.addWidget(self.duplex_box)
-
-        # 3. Printer & Output Section
+        # 2. Printer Selection Section
         printer_box = QGroupBox("PRINTER")
         printer_layout = QVBoxLayout(printer_box)
-        printer_layout.setSpacing(6)
         printer_layout.setContentsMargins(8, 16, 8, 8)
+        printer_layout.setSpacing(6)
 
         self.combo_printer = QComboBox()
-        self.combo_printer.addItem("Default System Printer")
-        self.combo_printer.addItem("Save as PDF File")
+        self.combo_printer.setMinimumHeight(28)
+        printer_layout.addWidget(QLabel("Destination:"))
         printer_layout.addWidget(self.combo_printer)
-
-        self.combo_paper = QComboBox()
-        self.combo_paper.addItems(["Auto (Match Document)", "A4 (210 x 297 mm)", "US Letter (8.5 x 11 in)"])
-        printer_layout.addWidget(self.combo_paper)
-
-        copies_layout = QHBoxLayout()
-        copies_label = QLabel("Copies:")
-        copies_label.setObjectName("metaLabel")
-        copies_layout.addWidget(copies_label)
-        self.spin_copies = QSpinBox()
-        self.spin_copies.setRange(1, 99)
-        self.spin_copies.setValue(1)
-        copies_layout.addWidget(self.spin_copies)
-        printer_layout.addLayout(copies_layout)
 
         layout.addWidget(printer_box)
 
         layout.addStretch()
 
-        # 4. Action Buttons
-        self.btn_print = QPushButton("\u2399  Print Document")
-        self.btn_print.setObjectName("primaryButton")
-        self.btn_print.setFixedHeight(34)
+        # 4. Action Buttons (Simplified)
+        self.btn_open_normal = QPushButton("⧉  Open in PDF Viewer")
+        self.btn_open_normal.setObjectName("primaryButton")
+        self.btn_open_normal.setFixedHeight(34)
+        
+        self.btn_open_fronts = QPushButton("⓵  1. Open Front Pages")
+        self.btn_open_fronts.setObjectName("primaryButton")
+        self.btn_open_fronts.setFixedHeight(34)
+        
+        from src.widgets import FlipAnimationWidget
+        self.anim_widget = FlipAnimationWidget("long")
+        self.anim_widget.setVisible(False)
+        
+        self.btn_open_backs = QPushButton("⓶  2. Open Back Pages")
+        self.btn_open_backs.setObjectName("primaryButton")
+        self.btn_open_backs.setFixedHeight(34)
+        self.btn_open_backs.setVisible(False)
 
-        self.btn_export = QPushButton("\u2913  Export Imposed PDF...")
+        self.btn_export = QPushButton("⤓  Export Imposed PDF...")
         self.btn_export.setObjectName("secondaryButton")
         self.btn_export.setFixedHeight(30)
 
-        layout.addWidget(self.btn_print)
+        layout.addWidget(self.btn_open_normal)
+        layout.addWidget(self.btn_open_fronts)
+        
+        anim_layout = QHBoxLayout()
+        anim_layout.addStretch()
+        anim_layout.addWidget(self.anim_widget)
+        anim_layout.addStretch()
+        layout.addLayout(anim_layout)
+        
+        layout.addWidget(self.btn_open_backs)
         layout.addWidget(self.btn_export)
 
         # Hidden backward-compat combo for invert_colors (always Standard)
         self.combo_invert = QComboBox()
-        self.combo_invert.addItems(["Standard (Original Colors)", "Invert Colors (Dark Mode / Negative)"])
+        self.combo_invert.addItems(["Standard", "Invert"])
         self.combo_invert.setVisible(False)
+
+        scroll.setWidget(content_widget)
+        main_layout.addWidget(scroll)
 
         self._on_mode_toggled()
 
@@ -160,21 +195,22 @@ class SettingsPanel(QWidget):
         self.radio_duplex.toggled.connect(self._on_mode_toggled)
         self.radio_booklet.toggled.connect(self._on_mode_toggled)
 
-        self.combo_flip.currentIndexChanged.connect(self._emit_options)
-        self.chk_reverse_backs.toggled.connect(self._emit_options)
-        self.combo_paper.currentIndexChanged.connect(self._emit_options)
-        self.spin_copies.valueChanged.connect(self._emit_options)
-
-        self.btn_print.clicked.connect(self.print_clicked)
         self.btn_export.clicked.connect(self.export_clicked)
 
     def set_document_info(self, filename: str, total_pages: int, size_str: str):
         self.lbl_doc_name.setText(filename)
-        self.lbl_doc_stats.setText(f"{total_pages} pages \u2022 {size_str}")
+        self.lbl_doc_stats.setText(f"{total_pages} pages • {size_str}")
 
     def _on_mode_toggled(self):
         mode = self.get_current_mode()
-        self.duplex_box.setVisible(mode in ("Manual Duplex", "Booklet"))
+        
+        is_duplex = mode in ("Manual Duplex", "Booklet")
+        self.btn_open_normal.setVisible(not is_duplex)
+        self.btn_open_fronts.setVisible(is_duplex)
+        # Only show backs & animation if fronts was clicked (we will handle that externally, but reset here)
+        self.anim_widget.setVisible(False)
+        self.btn_open_backs.setVisible(False)
+        
         self.mode_changed.emit(mode)
         self._emit_options()
 
@@ -197,14 +233,11 @@ class SettingsPanel(QWidget):
             self.radio_normal.setChecked(True)
 
     def get_settings(self) -> dict:
-        # Prevent accessing widgets before setup completes
-        if not hasattr(self, "combo_printer") or not hasattr(self, "check_page_numbers"):
+        if not hasattr(self, "check_page_numbers"):
             return {
                 "mode": "Normal",
                 "flip_edge": "long",
                 "reverse_backs": False,
-                "printer": "Save as PDF File",
-                "copies": 1,
                 "invert_colors": False,
                 "print_page_numbers": False,
                 "page_number_pos": "Bottom Right"
@@ -212,23 +245,17 @@ class SettingsPanel(QWidget):
 
         return {
             "mode": self.get_current_mode(),
-            "flip_edge": "short" if "Short" in self.combo_flip.currentText() else "long",
-            "reverse_backs": self.chk_reverse_backs.isChecked(),
-            "printer": self.combo_printer.currentText(),
-            "copies": self.spin_copies.value(),
+            "flip_edge": "long",
+            "reverse_backs": False,
             "invert_colors": False,
             "print_page_numbers": self.check_page_numbers.isChecked(),
             "page_number_pos": self.combo_page_num_pos.currentText(),
         }
 
     def set_available_printers(self, printers: List[str]):
-        current = self.combo_printer.currentText()
+        """Set the list of available printers in the printer combo box."""
         self.combo_printer.clear()
-        self.combo_printer.addItem("Default System Printer")
-        for p in printers:
-            self.combo_printer.addItem(p)
-        self.combo_printer.addItem("Save as PDF File")
-
-        idx = self.combo_printer.findText(current)
-        if idx >= 0:
-            self.combo_printer.setCurrentIndex(idx)
+        if printers:
+            self.combo_printer.addItems(printers)
+        else:
+            self.combo_printer.addItem("No printers found")
