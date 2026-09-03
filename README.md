@@ -1,251 +1,189 @@
-# PDF Duplex/Booklet Printer
+# 🖨️ PDF Duplex & Booklet Studio
 
-A Python/PyQt6 GUI application for manual duplex and booklet printing on Linux.
+[![Python](https://img.shields.io/badge/Python-3.11%2B-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
+[![PyQt6](https://img.shields.io/badge/GUI-PyQt6-41CD52.svg?logo=qt&logoColor=white)](https://www.riverbankcomputing.com/software/pyqt/)
+[![Platform](https://img.shields.io/badge/Platform-Linux-FCC624.svg?logo=linux&logoColor=black)](https://kernel.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![CUPS Ready](https://img.shields.io/badge/Printing-CUPS-007acc.svg)](https://www.cups.org/)
 
-## Features
+A modern, high-performance Linux desktop workstation designed for **manual duplex printing** (printing double-sided on single-sided home and office printers) and **folded booklet creation** with zero aspect-ratio distortion, per-page ink saver inversion, and direct system PDF integration.
 
-- Load a PDF and preview the first page.
-- Choose printing mode: Normal, Manual Duplex, or Booklet.
-- Optional page inversion (placeholder).
-- Print workflow:
-  - For Normal mode: sends the PDF directly to the printer.
-  - For Manual Duplex and Booklet modes:
-    1. Prints the first side (all front pages in correct order).
-    2. Prompts the user to flip the stack and reinsert.
-    3. Prints the second side (all back pages).
-- Uses the system's CUPS `lp` command for printing.
-- Preview uses PyQt6.QtPdf for high-quality, vector-based rendering.
+---
 
-## Installation
+## 📸 Overview & Modern Architecture
 
-### Option 1: pip (from source)
+Built with a responsive **three-panel layout** and a default **Zed Dark aesthetic** (`#28282E` background, `#212126` containers, `#E64B3D` accent):
+
+1. **Left Panel (Sheets & Pages Sidebar)**:
+   - Visual card list adapting dynamically to the active mode:
+     - **Normal Mode**: 1-up page list with page numbers and thumbnails.
+     - **Manual Duplex Mode**: 2-up sheets displaying Front and Back side-by-side (`P1 • P2`, `P3 • P4`).
+     - **Booklet Mode**: 4-page signature cards (`[LF | RF]` Front and `[LB | RB]` Back) reflecting real physical paper sheets.
+   - Multi-selection via mouse click, `Shift + Click` (range select), `Ctrl + Click` (toggle select), and `Ctrl + A` (select all).
+   - Per-page or per-sheet **Invert / Ink Saver** toggle (`Ctrl + I` or button).
+   - Page range filter (`All Pages` or custom ranges like `1-5, 8-10`).
+2. **Center Panel (Interactive Canvas)**:
+   - Crisp rendering with white paper simulation and dark borders.
+   - Real-time zoom controls (`Fit to Page`, `Fit to Width`, custom zoom `25%` to `400%`).
+   - Bottom navigation bar with previous/next sheet controls and quick-jump indicators.
+3. **Right Panel (Inspector & Actions)**:
+   - Drag-and-drop document loader with file metadata (page count, file size).
+   - Mode switcher: **Normal (1-Up Single-Sided)**, **Manual Duplex (2-Sided)**, and **Booklet (Folded 2-Up)**.
+   - Automatic **Page Number Stamping** with 6 positioning presets.
+   - Printer destination selector detecting local CUPS printers.
+   - 2-Step interactive workflow buttons: **Open Front Pages** ➔ **Visual Flip Prompt** ➔ **Open Back Pages**.
+
+---
+
+## ⚡ Quick Install & Run (No Root / Sudo Required)
+
+### 1. One-Line Install to `$HOME` (Recommended)
+
+Installs the app into `~/.local/share/pdf-duplex-app`, creates a command-line launcher at `~/.local/bin/pdf-duplex-app`, and registers it in your desktop application launcher menu (GNOME, KDE, etc.):
 
 ```bash
-# Clone the repository
-git clone <repository-url>
+curl -fsSL https://raw.githubusercontent.com/PriyanshuPriyadarshi/pdf-duplex-app/main/install.sh | bash
+```
+
+Once installed, simply launch it from your application menu or run:
+```bash
+pdf-duplex-app
+```
+
+### 2. One-Line Uninstall
+
+To cleanly remove the application, its launcher, icons, and desktop shortcuts:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/PriyanshuPriyadarshi/pdf-duplex-app/main/uninstall.sh | bash
+```
+
+*(Or via the install script with `--uninstall`:)*
+```bash
+curl -fsSL https://raw.githubusercontent.com/PriyanshuPriyadarshi/pdf-duplex-app/main/install.sh | bash -s -- --uninstall
+```
+
+---
+
+## 🚀 Run Instantly Without Installing (Like `npx`)
+
+If you use [Astral's `uv`](https://github.com/astral-sh/uv), you can run the app immediately in a temporary environment without manual installation:
+
+```bash
+uvx --from git+https://github.com/PriyanshuPriyadarshi/pdf-duplex-app.git pdf-duplex-app
+```
+
+Or install it permanently into your user tools:
+```bash
+uv tool install git+https://github.com/PriyanshuPriyadarshi/pdf-duplex-app.git
+```
+
+### Via `pipx`
+
+```bash
+pipx install git+https://github.com/PriyanshuPriyadarshi/pdf-duplex-app.git
+```
+
+---
+
+## 🌟 Key Features & How It Works
+
+### 1. Manual Duplex (2-Sided Printing on Standard Printers)
+Most affordable home and office printers only print single-sided. Printing double-sided manually is notoriously error-prone:
+- **Pass 1 (Fronts)**: Automatically extracts all odd pages (`1, 3, 5, 7...`). Click **"⓵ 1. Open Front Pages"** to print the entire front stack in one batch.
+- **Flip & Reinsert**: A visual guide prompts you to take the printed stack, flip it, and place it back into the paper tray.
+- **Pass 2 (Backs)**: Click **"⓶ 2. Open Back Pages"** to print all even pages (`2, 4, 6, 8...`) onto the opposite side of each sheet in matching order.
+
+### 2. Booklet Mode (Folded 2-Up Signatures)
+Converts standard portrait documents into saddle-stitched folded booklets:
+- Pages are scaled proportionally and placed 2-up on landscape sheets.
+- Proper signature imposition:
+  - **Sheet 1 Front**: Last Page + Page 1
+  - **Sheet 1 Back**: Page 2 + Second-to-last Page
+- Once printed via the 2-step duplex pass, stack the sheets together, fold down the spine, and staple.
+
+### 3. Per-Page Invert / Ink Saver
+- Select any pages or sheets in the sidebar and click **Invert / Ink Saver** (or press `Ctrl + I`).
+- Inverts color values (black background, white text/graphics), perfect for printing inverted dark diagrams, code listings, or ink-saving schemes.
+- **High Fidelity**: Only targeted pages undergo high-resolution raster inversion; non-targeted pages remain untouched vector PDF pages with selectable text and small file size.
+
+### 4. Page Number Stamping
+- Automatically calculates and stamps formatted page numbers onto output sheets.
+- Choose from 6 positions: Bottom Right, Bottom Center, Bottom Left, Top Right, Top Center, Top Left.
+
+---
+
+## ⌨️ Keyboard Shortcuts
+
+| Shortcut | Action |
+| :--- | :--- |
+| `Ctrl + O` | Open PDF Document |
+| `Ctrl + P` | Print Document |
+| `Ctrl + A` | Select all sheets/pages |
+| `Ctrl + I` | Toggle Invert / Ink Saver on selected items |
+| `F` | Fit sheet to window |
+| `W` | Fit sheet to width |
+| `+` / `-` | Zoom in / Zoom out |
+
+---
+
+## 💻 Manual Clone & Development
+
+### Prerequisites
+- Python 3.10+
+- CUPS printing system (`cups` package on Linux)
+- `uv` (recommended) or standard `python3 -m venv`
+
+```bash
+# 1. Clone repository
+git clone https://github.com/PriyanshuPriyadarshi/pdf-duplex-app.git
 cd pdf-duplex-app
 
-# Create a virtual environment and install
-python3 -m venv venv
-source venv/bin/activate
-pip install -e .
-```
+# 2. Set up virtual environment
+uv venv
+source .venv/bin/activate
 
-This installs the `pdf-duplex-app` command globally in your virtual environment.
+# 3. Install in editable mode
+uv pip install -e .
 
-### Option 2: pipx (isolated install)
-
-```bash
-pipx install git+https://github.com/your-username/pdf-duplex-app.git
-```
-
-### Option 3: AppImage (portable, no dependencies)
-
-1. Download the latest `PDFDuplexPrinter-*.AppImage` from [Releases](https://github.com/your-username/pdf-duplex-app/releases)
-2. Make it executable and run:
-```bash
-chmod +x PDFDuplexPrinter-*.AppImage
-./PDFDuplexPrinter-*.AppImage
-```
-
-### Option 4: Flatpak (sandboxed)
-
-```bash
-# Add Flathub if not already added
-flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-
-# Install from Flathub (when published)
-flatpak install flathub com.example.pdfduplexapp
-
-# Or install from local build
-flatpak install --user pdf-duplex-app.flatpak
-```
-
-### System Dependencies (required for all methods)
-
-- CUPS printing system (`cups` package)
-- `lp` command available in PATH
-- Qt6 libraries (usually pulled in by PyQt6)
-
-On Fedora:
-```bash
-sudo dnf install cups qt6-qtbase
-```
-
-On Ubuntu/Debian:
-```bash
-sudo apt install cups libqt6core6 libqt6gui6 libqt6widgets6 libqt6pdf6
-```
-
-On Arch:
-```bash
-sudo pacman -S cups qt6-base qt6-pdf
-```
-
-## Usage
-
-### From virtual environment
-```bash
-source venv/bin/activate
-pdf-duplex-app
-# or
+# 4. Run application
 python run.py
 ```
 
-### Installed via pipx or system pip
-```bash
-pdf-duplex-app
-```
+### Running Test Suite
 
-### AppImage
-```bash
-./PDFDuplexPrinter-*.AppImage
-```
+All algorithms and UI interactions are covered by unit tests:
 
-### Flatpak
-```bash
-flatpak run com.example.pdfduplexapp
-```
-
-### GUI Overview
-
-1. **Open PDF** — Click "Open PDF" to load a file. First page renders in the preview area.
-2. **Select Printer** — Choose from detected CUPS printers (dropdown).
-3. **Choose Mode**:
-   - **Normal** — Print as-is, all pages in order.
-   - **Manual Duplex** — Prints odd pages first, prompts to flip stack, then prints even pages in reverse.
-   - **Booklet** — Imposes 2 pages per sheet (half-width), prints in booklet order for folding.
-4. **Options**:
-   - **Invert pages** — (Placeholder) Check to invert page order on second side.
-5. **Print** — Starts the print workflow. For duplex/booklet modes, a dialog will prompt you to flip and reinsert paper.
-
-## Theme Settings
-
-The application respects the system Qt theme. To customize:
-
-### Force Light/Dark Mode
-```bash
-# Light
-QT_STYLE_OVERRIDE=fusion QT_QUICK_CONTROLS_STYLE=fusion pdf-duplex-app
-
-# Dark (using qt6ct or Kvantum)
-export QT_QPA_PLATFORMTHEME=qt6ct
-pdf-duplex-app
-```
-
-### Using qt6ct (recommended for Linux)
-```bash
-sudo dnf install qt6ct  # or apt install qt6ct
-qt6ct  # Configure theme, fonts, icon theme
-export QT_QPA_PLATFORMTHEME=qt6ct
-pdf-duplex-app
-```
-
-### Using Kvantum
-```bash
-sudo dnf install kvantum-qt6
-kvantummanager  # Pick a theme
-export QT_STYLE_OVERRIDE=kvantum
-pdf-duplex-app
-```
-
-### High DPI / Fractional Scaling
-```bash
-export QT_ENABLE_HIGHDPI_SCALING=1
-export QT_SCALE_FACTOR=1.5  # or QT_AUTO_SCREEN_SCALE_FACTOR=1
-pdf-duplex-app
-```
-
-## Development Setup
-
-### Prerequisites
-- Python 3.11+
-- uv (recommended) or pip + venv
-- CUPS development headers (for printing tests)
-
-```bash
-# Fedora
-sudo dnf install python3.11 python3.11-venv cups-devel qt6-qtbase-devel
-
-# Ubuntu/Debian
-sudo apt install python3.11 python3.11-venv libcups2-dev qt6-base-dev
-
-# Arch
-sudo pacman -S python cups qt6-base
-```
-
-### Quick Start
-```bash
-git clone <repository-url>
-cd pdf-duplex-app
-
-# Using uv (fastest)
-uv venv
-source .venv/bin/activate
-uv pip install -e ".[dev]"
-
-# Or using pip
-python3 -m venv venv
-source venv/bin/activate
-pip install -e ".[dev]"
-```
-
-### Development Dependencies
-```toml
-# In pyproject.toml under [project.optional-dependencies]
-dev = [
-    "pytest>=7.0",
-    "pytest-qt>=4.0",
-    "ruff>=0.1.0",
-    "mypy>=1.0",
-    "pre-commit>=3.0",
-]
-```
-
-### Running Tests
 ```bash
 pytest -v
-pytest --cov=src --cov-report=term-missing
 ```
 
-### Code Quality
-```bash
-ruff check .
-ruff format .
-mypy .
-pre-commit run --all-files
+---
+
+## 📁 Project Structure
+
+```text
+pdf-duplex-app/
+├── src/
+│   ├── main_window.py          # Three-panel workstation layout & workflow controller
+│   ├── center_preview.py       # Interactive canvas with zooming & sheet navigation
+│   ├── sidebar_page_list.py    # Mode-reactive thumbnail list with multi-selection
+│   ├── settings_panel.py       # Document details, print mode, & action triggers
+│   ├── imposer.py              # Mathematical imposition engine & pass splitting
+│   ├── theme.py                # Modern Zed Dark palette & Qt styling
+│   ├── utils.py                # CUPS printer integration & page range parser
+│   └── widgets.py              # Flip prompt animation & UI components
+├── assets/
+│   └── pdf-duplex-app.svg      # High-resolution vector application icon
+├── tests/                      # Full test suite (GUI, imposer, preview, themes)
+├── install.sh                  # One-line user installer & uninstaller script
+├── uninstall.sh                # Dedicated uninstaller script
+├── pyproject.toml              # Modern PEP 621 package specification
+└── run.py                      # Application launcher entry point
 ```
 
-### Building AppImage
-```bash
-# Requires linuxdeploy and linuxdeploy-plugin-qt
-pip install -e ".[appimage]"
-python -m build_appimage
-```
+---
 
-### Building Flatpak
-```bash
-flatpak-builder --user --install --force-clean build-dir com.example.pdfduplexapp.yml
-```
+## 📄 License
 
-## Testing
-
-Run the unit tests:
-```bash
-source venv/bin/activate
-pytest
-```
-
-With coverage:
-```bash
-pytest --cov=. --cov-report=html
-```
-
-## Notes
-
-- Manual duplex and booklet imposition assume long-edge flip (flip over like a book).
-- The booklet imposition places two pages per sheet, scaled to half width, ready for duplex printing.
-- Page inversion is not yet implemented (stretch goal).
-- For the best experience, ensure your printer is configured in CUPS and the `lp` command works.
-
-## License
+This project is open-source software licensed under the **[MIT License](LICENSE)**.

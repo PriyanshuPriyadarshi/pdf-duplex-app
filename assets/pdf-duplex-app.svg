@@ -1,0 +1,44 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="256" y2="256" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#28282E"/>
+      <stop offset="100%" stop-color="#1A1A1E"/>
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="48" y1="48" x2="208" y2="208" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FF5C4D"/>
+      <stop offset="100%" stop-color="#E64B3D"/>
+    </linearGradient>
+    <filter id="shadow" x="30" y="30" width="196" height="196" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+
+  <!-- App Background Tile -->
+  <rect width="256" height="256" rx="56" fill="url(#bgGrad)"/>
+  <rect x="2" y="2" width="252" height="252" rx="54" stroke="#36363D" stroke-width="2"/>
+
+  <!-- Back Sheet (Rotated slightly for duplex feel) -->
+  <g filter="url(#shadow)">
+    <rect x="74" y="44" width="108" height="138" rx="8" fill="#323238" stroke="#484852" stroke-width="2"/>
+    <!-- Page Lines on Back Sheet -->
+    <line x1="90" y1="68" x2="162" y2="68" stroke="#5C5C68" stroke-width="3" stroke-linecap="round"/>
+    <line x1="90" y1="84" x2="148" y2="84" stroke="#5C5C68" stroke-width="3" stroke-linecap="round"/>
+    <line x1="90" y1="100" x2="158" y2="100" stroke="#5C5C68" stroke-width="3" stroke-linecap="round"/>
+
+    <!-- Front Sheet (Main Paper) -->
+    <rect x="52" y="66" width="108" height="138" rx="8" fill="#F4F4F5" stroke="#FFFFFF" stroke-width="2"/>
+
+    <!-- Front Sheet Lines -->
+    <rect x="68" y="82" width="36" height="8" rx="2" fill="#E64B3D"/>
+    <line x1="68" y1="104" x2="144" y2="104" stroke="#A1A1AA" stroke-width="3.5" stroke-linecap="round"/>
+    <line x1="68" y1="118" x2="134" y2="118" stroke="#A1A1AA" stroke-width="3.5" stroke-linecap="round"/>
+    <line x1="68" y1="132" x2="140" y2="132" stroke="#A1A1AA" stroke-width="3.5" stroke-linecap="round"/>
+    <line x1="68" y1="146" x2="120" y2="146" stroke="#A1A1AA" stroke-width="3.5" stroke-linecap="round"/>
+
+    <!-- Duplex Reverse Arrow Loop Badge -->
+    <circle cx="168" cy="168" r="30" fill="url(#accentGrad)"/>
+    <!-- Circular arrows for duplex flip -->
+    <path d="M168 148 C179 148 188 157 188 168 C188 174 185 180 180 184 M184 188 L178 185 L182 178" stroke="#FFFFFF" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <path d="M168 188 C157 188 148 179 148 168 C148 162 151 156 156 152 M152 148 L158 151 L154 158" stroke="#FFFFFF" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  </g>
+</svg>

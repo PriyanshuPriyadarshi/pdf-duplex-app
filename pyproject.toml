@@ -27,6 +27,8 @@ classifiers = [
 dependencies = [
     "PyQt6>=6.5",
     "pypdf>=3.0",
+    "Pillow>=9.0",
+    "reportlab>=3.6",
 ]
 
 [project.urls]
