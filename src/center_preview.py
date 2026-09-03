@@ -74,7 +74,7 @@ class CenterPreview(QWidget):
             QLabel {
                 background-color: #ffffff;
                 border-radius: 0px;
-                border: 1px solid #36363d;
+                border: 1px solid #36363D;
             }
         """)
         self.viewport_layout.addWidget(self.paper_label)
@@ -82,7 +82,7 @@ class CenterPreview(QWidget):
         # Empty State
         self.empty_label = QLabel("\u25a4 Open a PDF to preview print layout")
         self.empty_label.setFont(QFont("sans-serif", 13))
-        self.empty_label.setStyleSheet("color: #636363; padding: 40px;")
+        self.empty_label.setStyleSheet("color: #888890; padding: 40px;")
         self.viewport_layout.addWidget(self.empty_label)
 
         self.scroll_area.setWidget(self.viewport_widget)
@@ -119,7 +119,7 @@ class CenterPreview(QWidget):
         # Separator
         sep = QFrame()
         sep.setFrameShape(QFrame.Shape.VLine)
-        sep.setStyleSheet("color: #36363d;")
+        sep.setStyleSheet("color: #36363D;")
         bar_layout.addWidget(sep)
 
         # Zoom: Out / Level / In
@@ -143,7 +143,7 @@ class CenterPreview(QWidget):
         # Separator
         sep2 = QFrame()
         sep2.setFrameShape(QFrame.Shape.VLine)
-        sep2.setStyleSheet("color: #36363d;")
+        sep2.setStyleSheet("color: #36363D;")
         bar_layout.addWidget(sep2)
 
         # Fit controls
@@ -173,7 +173,7 @@ class CenterPreview(QWidget):
             QLabel {
                 background-color: #212126f0;
                 color: #E64B3D;
-                border: 1px solid #40404a;
+                border: 1px solid #36363D;
                 border-radius: 0px;
                 padding: 6px 14px;
             }
@@ -491,7 +491,7 @@ class CenterPreview(QWidget):
         painter.drawText(page_margin, 14, "FRONT")
 
         # "BACK" label
-        painter.setPen(QColor("#636363"))
+        painter.setPen(QColor("#888890"))
         painter.drawText(half_w + page_margin, 14, "BACK")
 
         page_y = label_h + 4
@@ -505,7 +505,7 @@ class CenterPreview(QWidget):
         )
 
         # Center divider
-        pen = QPen(QColor("#40404a"))
+        pen = QPen(QColor("#36363D"))
         pen.setStyle(Qt.PenStyle.DashLine)
         pen.setWidth(1)
         painter.setPen(pen)
@@ -536,9 +536,15 @@ class CenterPreview(QWidget):
         Top row: Front side [LF | RF] with spine fold
         Bottom row: Back side [LB | RB] with spine fold
         Horizontal divider between rows."""
-        # Portrait-ish aspect for 2x2 grid
-        sheet_w = 842
-        sheet_h = 842  # Square-ish to fit 2 rows
+        # Get actual page size for exact aspect ratio scaling
+        page_size = self._doc.pagePointSize(0) if self._doc.pageCount() > 0 else None
+        if page_size and page_size.width() > 0 and page_size.height() > 0:
+            pw, ph = page_size.width(), page_size.height()
+            sheet_w = pw * 2
+            sheet_h = ph * 2
+        else:
+            sheet_w = 842
+            sheet_h = 1190  # 595 * 2
 
         if self._fit_mode == "page":
             scale = min(max_w / sheet_w, max_h / sheet_h)
@@ -589,10 +595,10 @@ class CenterPreview(QWidget):
         )
 
         # ── HORIZONTAL FLIP DIVIDER ──
-        painter.setPen(QPen(QColor("#636363"), 1, Qt.PenStyle.DashDotLine))
+        painter.setPen(QPen(QColor("#888890"), 1, Qt.PenStyle.DashDotLine))
         painter.drawLine(margin, half_h, target_w - margin, half_h)
         painter.setFont(QFont("sans-serif", 8))
-        painter.setPen(QColor("#636363"))
+        painter.setPen(QColor("#888890"))
         flip_text = "\u2191 flip \u2193"
         fm = painter.fontMetrics()
         tw = fm.horizontalAdvance(flip_text)
@@ -606,7 +612,7 @@ class CenterPreview(QWidget):
 
         # ── BOTTOM ROW: BACK SIDE ──
         painter.setFont(QFont("sans-serif", 10, QFont.Weight.Bold))
-        painter.setPen(QColor("#636363"))
+        painter.setPen(QColor("#888890"))
         painter.drawText(margin, half_h + 14, "BACK SIDE")
 
         page_y_bot = half_h + label_h + 4

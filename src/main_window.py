@@ -311,6 +311,12 @@ class MainWindow(QMainWindow):
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName("PDF Duplex & Booklet Studio")
+    
+    # Set global modern typography
+    font = QFont("Inter", 10)
+    font.setStyleHint(QFont.StyleHint.SansSerif)
+    app.setFont(font)
+    
     load_saved_theme(app)
 
     window = MainWindow()

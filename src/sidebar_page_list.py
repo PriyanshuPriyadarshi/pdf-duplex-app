@@ -67,7 +67,7 @@ class ThumbnailCard(QFrame):
         self.invert_badge = QLabel("\u25cb")  # ○
         self.invert_badge.setFixedWidth(18)
         self.invert_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.invert_badge.setStyleSheet("color: #636363; font-size: 12px;")
+        self.invert_badge.setStyleSheet("color: #5c6370; font-size: 12px;")
         self.invert_badge.setToolTip("Original colors")
         header_layout.addWidget(self.invert_badge)
 
@@ -83,7 +83,7 @@ class ThumbnailCard(QFrame):
         self.thumb_label = QLabel()
         self.thumb_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.thumb_label.setStyleSheet(
-            "background-color: #212126; border-radius: 0px; border: 1px solid #36363d;"
+            "background-color: #212126; border-radius: 0px; border: 1px solid #3e4451;"
         )
 
         if pixmap and not pixmap.isNull():
@@ -97,7 +97,7 @@ class ThumbnailCard(QFrame):
 
         # Page number info label
         self.page_info_label = QLabel(page_numbers)
-        self.page_info_label.setStyleSheet("color: #636363; font-size: 10px;")
+        self.page_info_label.setStyleSheet("color: #5c6370; font-size: 10px;")
         layout.addWidget(self.page_info_label)
 
     def set_selected(self, selected: bool):
@@ -114,7 +114,7 @@ class ThumbnailCard(QFrame):
             self.invert_badge.setToolTip("Inverted (Ink Saver)")
         else:
             self.invert_badge.setText("\u25cb")  # ○
-            self.invert_badge.setStyleSheet("color: #636363; font-size: 12px;")
+            self.invert_badge.setStyleSheet("color: #5c6370; font-size: 12px;")
             self.invert_badge.setToolTip("Original colors")
 
     @property
@@ -139,12 +139,12 @@ class ThumbnailCard(QFrame):
             self.setStyleSheet("""
                 QFrame {
                     background-color: #212126;
-                    border: 1px solid #36363d;
+                    border: 1px solid #3e4451;
                     border-radius: 0px;
                 }
                 QFrame:hover {
                     background-color: #28282E;
-                    border: 1px solid #636363;
+                    border: 1px solid #5c6370;
                 }
             """)
 
@@ -637,23 +637,23 @@ class SidebarPageList(QWidget):
 
             # 4. Subtle crisp paper border
             painter.setPen(QColor("#d4d4d8"))
-            painter.drawRect(px, py, target_w - 1, target_h - 1)
+            painter.drawRoundedRect(px, py, target_w - 1, target_h - 1, 4, 4)
 
-            # 5. Page number watermark badge (bottom-right corner)
+            # 5. Page number watermark badge (top-right corner)
             badge_text = str(page_num + 1)
-            badge_font = QFont("sans-serif", 6, QFont.Weight.Bold)
+            badge_font = QFont("sans-serif", 8, QFont.Weight.Bold)
             painter.setFont(badge_font)
 
             fm = painter.fontMetrics()
-            text_w = fm.horizontalAdvance(badge_text) + 6
-            text_h = fm.height() + 2
-            badge_x = px + target_w - text_w - 2
-            badge_y = py + target_h - text_h - 2
+            text_w = fm.horizontalAdvance(badge_text)
+            badge_size = max(text_w + 8, 18)
+            badge_x = px + target_w - badge_size
+            badge_y = py
 
-            painter.fillRect(badge_x, badge_y, text_w, text_h, QColor(0, 0, 0, 150))
-            painter.setPen(QColor("#ffffff"))
+            painter.fillRect(badge_x, badge_y, badge_size, badge_size, QColor("#E64B3D")) # Pro accent blue
+            painter.setPen(QColor("#28282E")) # Pro bg dark
             painter.drawText(
-                badge_x, badge_y, text_w, text_h,
+                badge_x, badge_y, badge_size, badge_size,
                 Qt.AlignmentFlag.AlignCenter, badge_text,
             )
         else:
@@ -661,7 +661,7 @@ class SidebarPageList(QWidget):
             painter.fillRect(x, y, max_w, max_h, QColor("#ffffff"))
             painter.setPen(QColor("#d4d4d8"))
             painter.drawRect(x, y, max_w - 1, max_h - 1)
-            painter.setPen(QColor("#636363"))
+            painter.setPen(QColor("#5c6370"))
             painter.setFont(QFont("sans-serif", 7))
             painter.drawText(
                 x, y, max_w, max_h, Qt.AlignmentFlag.AlignCenter, blank_text
@@ -700,12 +700,12 @@ class SidebarPageList(QWidget):
         self._draw_page_thumbnail(painter, front_page, 6, 16, half_w, thumb_h)
 
         # Center separator
-        painter.setPen(QPen(QColor("#40404a"), 1, Qt.PenStyle.DashLine))
+        painter.setPen(QPen(QColor("#3e4451"), 1, Qt.PenStyle.DashLine))
         painter.drawLine(w // 2, 4, w // 2, h - 4)
 
         # Draw Back Page (Right)
         painter.setFont(QFont("sans-serif", 8, QFont.Weight.Bold))
-        painter.setPen(QColor("#636363"))
+        painter.setPen(QColor("#5c6370"))
         painter.drawText(w // 2 + 6, 12, "BACK")
         self._draw_page_thumbnail(
             painter, back_page, w // 2 + 6, 16, half_w, thumb_h
@@ -750,12 +750,12 @@ class SidebarPageList(QWidget):
         self._draw_page_thumbnail(painter, rf, w // 2 + 4, 14, half_w, row_h)
 
         # 2. HORIZONTAL SHEET DIVIDER
-        painter.setPen(QPen(QColor("#36363d"), 1))
+        painter.setPen(QPen(QColor("#3e4451"), 1))
         painter.drawLine(4, 70, w - 4, 70)
 
         # 3. BOTTOM ROW: BACK SIDE [LB | RB]
         painter.setFont(QFont("sans-serif", 7, QFont.Weight.Bold))
-        painter.setPen(QColor("#636363"))
+        painter.setPen(QColor("#5c6370"))
         painter.drawText(6, 81, "BACK SIDE")
 
         # Left Back

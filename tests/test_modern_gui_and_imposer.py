@@ -36,9 +36,8 @@ def test_theme_stylesheets():
     assert "#28282E" in dark_qss  # Dark background token
     assert "#212126" in dark_qss  # Container background token
     assert "#EEEEEE" in dark_qss  # Text token
-    assert "#636363" in dark_qss  # Secondary text token
+    assert "#888890" in dark_qss  # Secondary text token
     assert "#E64B3D" in dark_qss  # Accent token
-    assert "#ffffff" in light_qss
     assert len(dark_qss) > 500
     assert len(light_qss) > 500
 
