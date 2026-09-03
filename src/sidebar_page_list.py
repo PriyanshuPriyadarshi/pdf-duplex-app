@@ -495,7 +495,7 @@ class SidebarPageList(QWidget):
         for ci in self._selected_indices:
             card = self._cards[ci]
             card_pages = self._get_page_indices_for_card(ci)
-            is_inv = bool(card_pages) and all(
+            is_inv = bool(card_pages) and any(
                 p in self._inverted_pages for p in card_pages
             )
             card.set_inverted(is_inv)
@@ -581,7 +581,7 @@ class SidebarPageList(QWidget):
             card_pages = [f_pg]
             if b_pg is not None:
                 card_pages.append(b_pg)
-            is_inv = all(p in self._inverted_pages for p in card_pages)
+            is_inv = any(p in self._inverted_pages for p in card_pages)
 
             card = ThumbnailCard(
                 sheet_idx=s,
@@ -625,7 +625,7 @@ class SidebarPageList(QWidget):
 
             # Check inversion for all non-None pages
             card_pages = [p for p in [lf_idx, rf_idx, lb_idx, rb_idx] if p is not None]
-            is_inv = bool(card_pages) and all(p in self._inverted_pages for p in card_pages)
+            is_inv = bool(card_pages) and any(p in self._inverted_pages for p in card_pages)
 
             card = ThumbnailCard(
                 sheet_idx=s,

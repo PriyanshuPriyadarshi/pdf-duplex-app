@@ -303,3 +303,100 @@ def test_page_range_slicing(app, tmp_path):
 
     win.deleteLater()
 
+
+def test_settings_and_export_buttons_removed(app):
+    """Verify that settings button and export button have been removed from the UI."""
+    win = MainWindow()
+    assert not hasattr(win.settings_panel, "btn_app_settings")
+    assert not hasattr(win.settings_panel, "btn_export")
+    win.deleteLater()
+
+
+def test_duplex_passes_selective_inversion(tmp_path):
+    """Verify inverting pages 2 and 3 (pages 3 & 4) only inverts those pages in duplex passes."""
+    pdf_bytes = create_multi_page_pdf(6)
+    src_file = tmp_path / "sample6_inv.pdf"
+    src_file.write_bytes(pdf_bytes)
+
+    # Invert pages 2 and 3 (0-based: Page 3 and Page 4)
+    fronts, backs = imposer.get_duplex_passes(str(src_file), reverse_backs=False, invert={2, 3})
+    
+    # Fronts should have 3 pages: [Doc 1, Doc 3 (inv), Doc 5]
+    # Backs should have 3 pages: [Doc 2, Doc 4 (inv), Doc 6]
+    from PyQt6.QtPdf import QPdfDocument
+    from PyQt6.QtCore import QBuffer, QIODevice, QSize
+    from PyQt6.QtGui import QImage, QPainter, QColor
+
+    def is_page_black(pdf_bytes, page_idx):
+        doc = QPdfDocument(None)
+        b = QBuffer()
+        b.setData(pdf_bytes)
+        b.open(QIODevice.OpenModeFlag.ReadOnly)
+        doc.load(b)
+        w, h = 100, 100
+        bg = QImage(QSize(w, h), QImage.Format.Format_ARGB32)
+        bg.fill(QColor("#ffffff"))
+        p = QPainter(bg)
+        p.drawImage(0, 0, doc.render(page_idx, QSize(w, h)))
+        p.end()
+        c = bg.pixelColor(10, 10)
+        return c.red() < 50 and c.green() < 50 and c.blue() < 50
+
+    # Fronts: Page 0 (Doc 1) white, Page 1 (Doc 3) black, Page 2 (Doc 5) white
+    assert not is_page_black(fronts, 0)
+    assert is_page_black(fronts, 1)
+    assert not is_page_black(fronts, 2)
+
+    # Backs: Page 0 (Doc 2) white, Page 1 (Doc 4) black, Page 2 (Doc 6) white
+    assert not is_page_black(backs, 0)
+    assert is_page_black(backs, 1)
+    assert not is_page_black(backs, 2)
+
+
+def test_booklet_passes_selective_inversion(tmp_path):
+    """Verify inverting pages 2 and 3 (pages 3 & 4) only inverts those pages in booklet passes."""
+    pdf_bytes = create_multi_page_pdf(8)
+    src_file = tmp_path / "sample8_inv.pdf"
+    src_file.write_bytes(pdf_bytes)
+
+    fronts, backs = imposer.get_booklet_passes(str(src_file), reverse_backs=False, invert={2, 3})
+
+    from PyQt6.QtPdf import QPdfDocument
+    from PyQt6.QtCore import QBuffer, QIODevice, QSize
+    from PyQt6.QtGui import QImage, QPainter, QColor
+
+    def check_halves(pdf_bytes, sheet_idx):
+        doc = QPdfDocument(None)
+        b = QBuffer()
+        b.setData(pdf_bytes)
+        b.open(QIODevice.OpenModeFlag.ReadOnly)
+        doc.load(b)
+        w, h = 200, 100
+        bg = QImage(QSize(w, h), QImage.Format.Format_ARGB32)
+        bg.fill(QColor("#ffffff"))
+        p = QPainter(bg)
+        p.drawImage(0, 0, doc.render(sheet_idx, QSize(w, h)))
+        p.end()
+        c_left = bg.pixelColor(50, 50)
+        c_right = bg.pixelColor(150, 50)
+        left_black = c_left.red() < 50 and c_left.green() < 50 and c_left.blue() < 50
+        right_black = c_right.red() < 50 and c_right.green() < 50 and c_right.blue() < 50
+        return left_black, right_black
+
+    # Sheet 0 Front: Left = P8, Right = P1 (both white)
+    s0f_l, s0f_r = check_halves(fronts, 0)
+    assert not s0f_l and not s0f_r
+
+    # Sheet 1 Front: Left = P6 (white), Right = P3 (INVERTED/BLACK)
+    s1f_l, s1f_r = check_halves(fronts, 1)
+    assert not s1f_l and s1f_r
+
+    # Sheet 0 Back: Left = P2, Right = P7 (both white)
+    s0b_l, s0b_r = check_halves(backs, 0)
+    assert not s0b_l and not s0b_r
+
+    # Sheet 1 Back: Left = P4 (INVERTED/BLACK), Right = P5 (white)
+    s1b_l, s1b_r = check_halves(backs, 1)
+    assert s1b_l and not s1b_r
+
+

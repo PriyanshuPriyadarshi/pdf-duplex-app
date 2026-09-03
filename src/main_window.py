@@ -75,14 +75,16 @@ class MainWindow(QMainWindow):
             return
 
         mode = self.settings_panel.get_current_mode()
+        inverted_pages = self.sidebar.get_inverted_pages()
+        invert = inverted_pages if inverted_pages else False
         if mode == "Normal":
-            pdf_bytes = imposer.impose_normal(self.current_file_path)
+            pdf_bytes = imposer.impose_normal(self.current_file_path, invert=invert)
             print_pdf(pdf_bytes, is_duplex=False)
         else:
             if mode == "Manual Duplex":
-                p1, p2 = imposer.get_duplex_passes(self.current_file_path)
+                p1, p2 = imposer.get_duplex_passes(self.current_file_path, invert=invert)
             else:
-                p1, p2 = imposer.get_booklet_passes(self.current_file_path)
+                p1, p2 = imposer.get_booklet_passes(self.current_file_path, invert=invert)
 
             print_pdf(p1, is_duplex=False)
             if show_flip_prompt(self):
@@ -163,8 +165,6 @@ class MainWindow(QMainWindow):
         self.settings_panel.btn_open_normal.clicked.connect(self.handle_open_normal)
         self.settings_panel.btn_open_fronts.clicked.connect(self.handle_open_fronts)
         self.settings_panel.btn_open_backs.clicked.connect(self.handle_open_backs)
-        self.settings_panel.export_clicked.connect(self.handle_export)
-        self.settings_panel.open_settings_clicked.connect(self.open_settings_dialog)
         self.sidebar.page_range_changed.connect(self.handle_page_range_changed)
 
     def _setup_shortcuts(self):
@@ -320,7 +320,11 @@ class MainWindow(QMainWindow):
     def _generate_normal_bytes(self) -> bytes:
         from src import imposer
         settings = self.settings_panel.get_settings()
-        invert = self.sidebar.get_inverted_pages() or False
+        inverted_pages = self.sidebar.get_inverted_pages()
+        if self.selected_page_indices and len(self.selected_page_indices) != self.total_pages:
+            invert = {i for i, orig_idx in enumerate(self.selected_page_indices) if orig_idx in inverted_pages}
+        else:
+            invert = inverted_pages if inverted_pages else False
         pdf_path, is_temp = self._get_effective_pdf_path()
         try:
             return imposer.impose_normal(
@@ -340,7 +344,11 @@ class MainWindow(QMainWindow):
         from src import imposer
         settings = self.settings_panel.get_settings()
         mode = settings.get("mode", "Normal")
-        invert = self.sidebar.get_inverted_pages() or False
+        inverted_pages = self.sidebar.get_inverted_pages()
+        if self.selected_page_indices and len(self.selected_page_indices) != self.total_pages:
+            invert = {i for i, orig_idx in enumerate(self.selected_page_indices) if orig_idx in inverted_pages}
+        else:
+            invert = inverted_pages if inverted_pages else False
         pdf_path, is_temp = self._get_effective_pdf_path()
         try:
             if mode == "Booklet":
@@ -384,14 +392,18 @@ class MainWindow(QMainWindow):
 
         try:
             # UI Feedback
-            self.settings_panel.btn_export.setEnabled(False)
-            self.settings_panel.btn_export.setText("⌛ Generating...")
+            if hasattr(self.settings_panel, "btn_export"):
+                self.settings_panel.btn_export.setEnabled(False)
+                self.settings_panel.btn_export.setText("⌛ Generating...")
             self.status_bar.showMessage("Generating imposed PDF (this may take a moment)...")
             QApplication.processEvents()
 
             # Get per-page inversion set from sidebar
             inverted_pages = self.sidebar.get_inverted_pages()
-            invert = inverted_pages if inverted_pages else False
+            if self.selected_page_indices and len(self.selected_page_indices) != self.total_pages:
+                invert = {i for i, orig_idx in enumerate(self.selected_page_indices) if orig_idx in inverted_pages}
+            else:
+                invert = inverted_pages if inverted_pages else False
 
             print_page_numbers = settings.get("print_page_numbers", False)
             page_number_pos = settings.get("page_number_pos", "Bottom Right")
@@ -437,8 +449,9 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Export Error", f"Failed to export PDF:\n{e}")
             self.status_bar.showMessage("Export failed.")
         finally:
-            self.settings_panel.btn_export.setEnabled(True)
-            self.settings_panel.btn_export.setText("\u2913  Export Imposed PDF...")
+            if hasattr(self.settings_panel, "btn_export"):
+                self.settings_panel.btn_export.setEnabled(True)
+                self.settings_panel.btn_export.setText("\u2913  Export Imposed PDF...")
 
     # Drag and Drop Support
     def dragEnterEvent(self, event: QDragEnterEvent):

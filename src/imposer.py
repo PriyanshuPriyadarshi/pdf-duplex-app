@@ -13,10 +13,11 @@ from PIL import Image, ImageOps
 def _invert_pdf_bytes(pdf_bytes: bytes, page_indices: Optional[Set[int]] = None) -> bytes:
     """Invert colors of a PDF using high-resolution raster inversion.
     If page_indices is provided, only invert pages where page index is in the set.
+    Non-targeted pages are preserved as pristine vector pages.
     If page_indices is None, invert all pages.
     """
     from PyQt6.QtCore import QSize, QBuffer, QIODevice
-    from PyQt6.QtGui import QImage, QPainter, QPdfWriter, QPageSize, QPageLayout
+    from PyQt6.QtGui import QImage, QPainter, QColor
     from PyQt6.QtPdf import QPdfDocument
 
     # Load into QPdfDocument via buffer
@@ -30,41 +31,48 @@ def _invert_pdf_bytes(pdf_bytes: bytes, page_indices: Optional[Set[int]] = None)
     if page_count == 0:
         return pdf_bytes
 
-    out_stream = io.BytesIO()
-    # Use PIL to assemble inverted images into a single PDF
-    pil_images = []
+    reader = PdfReader(io.BytesIO(pdf_bytes))
+    writer = PdfWriter()
+
+    pages_to_invert = set(range(page_count)) if page_indices is None else set(page_indices)
+    dpi = 200.0
+    scale = dpi / 72.0
 
     for i in range(page_count):
-        # Render at 200 DPI (approx 2.77x 72 DPI)
-        psize = doc.pagePointSize(i)
-        w, h = int(psize.width() * 2.5), int(psize.height() * 2.5)
-        if w <= 0 or h <= 0:
-            w, h = 1488, 2105
+        if i not in pages_to_invert:
+            # Preserve original vector page directly
+            if i < len(reader.pages):
+                writer.add_page(reader.pages[i])
+        else:
+            psize = doc.pagePointSize(i)
+            pw = float(psize.width()) if psize.width() > 0 else (float(reader.pages[i].mediabox.width) if i < len(reader.pages) else 595.0)
+            ph = float(psize.height()) if psize.height() > 0 else (float(reader.pages[i].mediabox.height) if i < len(reader.pages) else 842.0)
+            w = max(1, int(round(pw * scale)))
+            h = max(1, int(round(ph * scale)))
 
-        qimg = doc.render(i, QSize(w, h))
+            bg_img = QImage(QSize(w, h), QImage.Format.Format_ARGB32)
+            bg_img.fill(QColor("#ffffff"))
+            painter = QPainter(bg_img)
+            qimg = doc.render(i, QSize(w, h))
+            painter.drawImage(0, 0, qimg)
+            painter.end()
 
-        # Only invert if this page is targeted
-        if page_indices is None or i in page_indices:
-            qimg.invertPixels(QImage.InvertMode.InvertRgb)
+            bg_img.invertPixels(QImage.InvertMode.InvertRgb)
 
-        # Convert QImage to PIL Image
-        bits = qimg.bits().asstring(qimg.sizeInBytes())
-        pil_img = Image.frombuffer(
-            "RGBA", (qimg.width(), qimg.height()), bits, "raw", "BGRA", 0, 1
-        ).convert("RGB")
-        pil_images.append(pil_img)
+            bits = bg_img.bits().asstring(bg_img.sizeInBytes())
+            pil_img = Image.frombuffer(
+                "RGBA", (w, h), bits, "raw", "BGRA", 0, 1
+            ).convert("RGB")
 
-    if pil_images:
-        pil_images[0].save(
-            out_stream,
-            format="PDF",
-            save_all=True,
-            append_images=pil_images[1:],
-            resolution=200.0,
-        )
-        return out_stream.getvalue()
+            img_buf = io.BytesIO()
+            pil_img.save(img_buf, format="PDF", resolution=dpi)
+            img_buf.seek(0)
+            inv_reader = PdfReader(img_buf)
+            writer.add_page(inv_reader.pages[0])
 
-    return pdf_bytes
+    out = io.BytesIO()
+    writer.write(out)
+    return out.getvalue()
 
 
 def _stamp_page_numbers(pdf_bytes: bytes, position: str) -> bytes:
@@ -127,6 +135,27 @@ def _stamp_page_numbers(pdf_bytes: bytes, position: str) -> bytes:
     writer.write(out_io)
     return out_io.getvalue()
 
+def _prepare_input_reader(
+    input_path: str,
+    invert: Union[bool, Set[int]] = False,
+) -> PdfReader:
+    """Read input PDF, applying per-page inversion to input pages if requested."""
+    if not invert:
+        return PdfReader(input_path)
+
+    with open(input_path, "rb") as f:
+        data = f.read()
+
+    if isinstance(invert, set):
+        if not invert:
+            return PdfReader(io.BytesIO(data))
+        data = _invert_pdf_bytes(data, page_indices=invert)
+    else:
+        data = _invert_pdf_bytes(data)
+
+    return PdfReader(io.BytesIO(data))
+
+
 def impose_normal(
     input_path: str,
     invert: Union[bool, Set[int]] = False,
@@ -139,7 +168,8 @@ def impose_normal(
 
     if invert:
         if isinstance(invert, set):
-            data = _invert_pdf_bytes(data, page_indices=invert)
+            if invert:
+                data = _invert_pdf_bytes(data, page_indices=invert)
         else:
             data = _invert_pdf_bytes(data)
 
@@ -160,7 +190,7 @@ def get_duplex_passes(
     - Pass 2 (Backs): Pages 2, 4, 6, 8... (0-indexed: 1, 3, 5, 7...)
     If reverse_backs is True, Pass 2 page order is inverted for face-up output trays.
     """
-    reader = PdfReader(input_path)
+    reader = _prepare_input_reader(input_path, invert=invert)
     total_pages = len(reader.pages)
 
     writer_front = PdfWriter()
@@ -186,14 +216,6 @@ def get_duplex_passes(
     writer_back.write(buf_back)
     data_back = buf_back.getvalue()
 
-    if invert:
-        if isinstance(invert, set):
-            data_front = _invert_pdf_bytes(data_front, page_indices=invert)
-            data_back = _invert_pdf_bytes(data_back, page_indices=invert)
-        else:
-            data_front = _invert_pdf_bytes(data_front)
-            data_back = _invert_pdf_bytes(data_back)
-
     return data_front, data_back
 
 
@@ -205,7 +227,7 @@ def impose_duplex_combined(
     page_number_pos: str = "Bottom Right",
 ) -> bytes:
     """Return a single PDF with Pass 1 (Fronts) followed by Pass 2 (Backs)."""
-    front_bytes, back_bytes = get_duplex_passes(input_path, reverse_backs, invert=False)
+    front_bytes, back_bytes = get_duplex_passes(input_path, reverse_backs, invert=invert)
     r_front = PdfReader(io.BytesIO(front_bytes))
     r_back = PdfReader(io.BytesIO(back_bytes))
 
@@ -218,12 +240,6 @@ def impose_duplex_combined(
     out = io.BytesIO()
     writer.write(out)
     data = out.getvalue()
-
-    if invert:
-        if isinstance(invert, set):
-            data = _invert_pdf_bytes(data, page_indices=invert)
-        else:
-            data = _invert_pdf_bytes(data)
 
     if print_page_numbers:
         data = _stamp_page_numbers(data, position=page_number_pos)
@@ -257,7 +273,7 @@ def get_booklet_passes(
     - Pass 1: All Front sides of all sheets (Sheet 0 Front, Sheet 1 Front...)
     - Pass 2: All Back sides of all sheets (Sheet 0 Back, Sheet 1 Back...)
     """
-    reader = PdfReader(input_path)
+    reader = _prepare_input_reader(input_path, invert=invert)
     pages = reader.pages
     n = len(pages)
     if n == 0:
@@ -333,14 +349,6 @@ def get_booklet_passes(
     writer_back.write(buf_back)
     data_back = buf_back.getvalue()
 
-    if invert:
-        if isinstance(invert, set):
-            data_front = _invert_pdf_bytes(data_front, page_indices=invert)
-            data_back = _invert_pdf_bytes(data_back, page_indices=invert)
-        else:
-            data_front = _invert_pdf_bytes(data_front)
-            data_back = _invert_pdf_bytes(data_back)
-
     return data_front, data_back
 
 
@@ -359,7 +367,7 @@ def impose_booklet(
     Sheet 0 Front, Sheet 0 Back, Sheet 1 Front, Sheet 1 Back...
     Uses uniform proportional 2-up scaling with zero aspect ratio distortion.
     """
-    reader = PdfReader(input_path)
+    reader = _prepare_input_reader(input_path, invert=invert)
     pages = reader.pages
     n = len(pages)
     if n == 0:
@@ -411,12 +419,6 @@ def impose_booklet(
     out = io.BytesIO()
     writer.write(out)
     data = out.getvalue()
-
-    if invert:
-        if isinstance(invert, set):
-            data = _invert_pdf_bytes(data, page_indices=invert)
-        else:
-            data = _invert_pdf_bytes(data)
 
     if print_page_numbers:
         data = _stamp_page_numbers(data, position=page_number_pos)

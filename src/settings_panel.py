@@ -53,15 +53,6 @@ class SettingsPanel(QWidget):
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(10)
 
-        # Top Header (Settings)
-        header_layout = QHBoxLayout()
-        header_layout.addStretch()
-        self.btn_app_settings = QPushButton("⚙ Settings")
-        self.btn_app_settings.setFixedWidth(90)
-        self.btn_app_settings.clicked.connect(self.open_settings_clicked.emit)
-        header_layout.addWidget(self.btn_app_settings)
-        layout.addLayout(header_layout)
-
         # 0. Document & File Section
         doc_box = QGroupBox("DOCUMENT")
         doc_layout = QVBoxLayout(doc_box)
@@ -162,10 +153,6 @@ class SettingsPanel(QWidget):
         self.btn_open_backs.setFixedHeight(34)
         self.btn_open_backs.setVisible(False)
 
-        self.btn_export = QPushButton("⤓  Export Imposed PDF...")
-        self.btn_export.setObjectName("secondaryButton")
-        self.btn_export.setFixedHeight(30)
-
         layout.addWidget(self.btn_open_normal)
         layout.addWidget(self.btn_open_fronts)
         
@@ -176,7 +163,6 @@ class SettingsPanel(QWidget):
         layout.addLayout(anim_layout)
         
         layout.addWidget(self.btn_open_backs)
-        layout.addWidget(self.btn_export)
 
         # Hidden backward-compat combo for invert_colors (always Standard)
         self.combo_invert = QComboBox()
@@ -194,8 +180,6 @@ class SettingsPanel(QWidget):
         self.radio_normal.toggled.connect(self._on_mode_toggled)
         self.radio_duplex.toggled.connect(self._on_mode_toggled)
         self.radio_booklet.toggled.connect(self._on_mode_toggled)
-
-        self.btn_export.clicked.connect(self.export_clicked)
 
     def set_document_info(self, filename: str, total_pages: int, size_str: str):
         self.lbl_doc_name.setText(filename)
