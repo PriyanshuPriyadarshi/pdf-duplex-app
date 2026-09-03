@@ -306,7 +306,7 @@ class MainWindow(QMainWindow):
         self._open_in_viewer("imposed_backs.pdf", pass2)
 
     def _open_in_viewer(self, filename: str, pdf_bytes: bytes):
-        import tempfile, os
+        import tempfile, os, shutil, subprocess
         from PyQt6.QtGui import QDesktopServices
         from PyQt6.QtCore import QUrl
         
@@ -315,6 +315,16 @@ class MainWindow(QMainWindow):
         with open(file_path, "wb") as f:
             f.write(pdf_bytes)
             
+        # Prioritize dedicated Linux PDF viewers to prevent recursive self-opening
+        for viewer in ["papers", "evince", "okular", "atril", "qpdfview", "xreader", "zathura"]:
+            viewer_bin = shutil.which(viewer)
+            if viewer_bin:
+                try:
+                    subprocess.Popen([viewer_bin, file_path], start_new_session=True)
+                    return
+                except Exception:
+                    pass
+
         QDesktopServices.openUrl(QUrl.fromLocalFile(file_path))
 
     def _generate_normal_bytes(self) -> bytes:

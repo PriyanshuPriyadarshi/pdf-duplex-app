@@ -137,12 +137,11 @@ cat > "${DESKTOP_DIR}/${APP_NAME}.desktop" <<EOF
 [Desktop Entry]
 Name=${APP_TITLE}
 Comment=Manual duplex and booklet printing workstation with ink-saver inversion
-Exec=${BIN_DIR}/${APP_NAME} %f
+Exec=${BIN_DIR}/${APP_NAME}
 Icon=${APP_NAME}
 Terminal=false
 Type=Application
 Categories=Office;Printing;Publishing;
-MimeType=application/pdf;
 StartupNotify=true
 Keywords=PDF;printing;duplex;booklet;imposition;
 EOF
@@ -150,6 +149,19 @@ chmod +x "${DESKTOP_DIR}/${APP_NAME}.desktop"
 
 if command -v update-desktop-database >/dev/null 2>&1; then
     update-desktop-database "${DESKTOP_DIR}" 2>/dev/null || true
+fi
+
+# Ensure pdf-duplex-app does not hijack system default PDF viewer
+if command -v xdg-mime >/dev/null 2>&1; then
+    CURRENT_PDF_DEF=$(xdg-mime query default application/pdf 2>/dev/null || true)
+    if [ "$CURRENT_PDF_DEF" = "${APP_NAME}.desktop" ]; then
+        for viewer_desktop in org.gnome.Papers.desktop org.gnome.Evince.desktop evince.desktop org.kde.okular.desktop okular.desktop atril.desktop; do
+            if [ -f "/usr/share/applications/${viewer_desktop}" ]; then
+                xdg-mime default "${viewer_desktop}" application/pdf 2>/dev/null || true
+                break
+            fi
+        done
+    fi
 fi
 
 echo -e "${BLUE}================================================================${NC}"
