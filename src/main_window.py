@@ -1,0 +1,310 @@
+"""
+src/main_window.py - Modern 2026 three-panel main window for PDF Manual Duplex & Booklet Studio.
+Features pure edge-to-edge layout, right-hand control & document panel, and default Zed Dark theme.
+"""
+
+import sys
+import os
+from typing import Optional
+
+from PyQt6.QtWidgets import (
+    QApplication,
+    QMainWindow,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QPushButton,
+    QLabel,
+    QFileDialog,
+    QStatusBar,
+    QMessageBox,
+    QSplitter,
+)
+from PyQt6.QtGui import QFont, QAction, QKeySequence, QDragEnterEvent, QDropEvent
+from PyQt6.QtCore import Qt
+from PyQt6.QtPdf import QPdfDocument
+
+from src.theme import apply_theme, load_saved_theme
+from src.sidebar_page_list import SidebarPageList
+from src.center_preview import CenterPreview
+from src.settings_panel import SettingsPanel
+from src import imposer
+from src import utils
+from src.utils import print_pdf, show_flip_prompt
+
+
+class _ModeComboAdapter:
+    """Adapter allowing legacy code and tests to interact with mode_combo.currentText()"""
+    def __init__(self, settings_panel):
+        self._panel = settings_panel
+
+    def currentText(self) -> str:
+        return self._panel.get_current_mode()
+
+    def setCurrentText(self, text: str):
+        self._panel.set_current_mode(text)
+
+
+class MainWindow(QMainWindow):
+    """Main window organizing the 2026 three-panel workstation layout."""
+
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("PDF Duplex & Booklet Studio")
+        self.resize(1200, 780)
+        self.setMinimumSize(900, 600)
+        self.setAcceptDrops(True)
+
+        self.pdf_doc = QPdfDocument(self)
+        self.current_file_path = ""
+        self.total_pages = 0
+        self.current_theme = "dark"
+
+        self._setup_ui()
+        self._connect_signals()
+        self._setup_shortcuts()
+        self._refresh_printers()
+
+        # Compatibility adapter for mode selection
+        self.mode_combo = _ModeComboAdapter(self.settings_panel)
+
+    def print_document(self):
+        """Compatibility method for direct programmatic printing and test execution."""
+        if not self.current_file_path or self.total_pages == 0:
+            return
+
+        mode = self.settings_panel.get_current_mode()
+        if mode == "Normal":
+            pdf_bytes = imposer.impose_normal(self.current_file_path)
+            print_pdf(pdf_bytes, is_duplex=False)
+        else:
+            if mode == "Manual Duplex":
+                p1, p2 = imposer.get_duplex_passes(self.current_file_path)
+            else:
+                p1, p2 = imposer.get_booklet_passes(self.current_file_path)
+
+            print_pdf(p1, is_duplex=False)
+            if show_flip_prompt(self):
+                print_pdf(p2, is_duplex=False)
+
+    def _setup_ui(self):
+        # 1. Main Three-Panel Layout via QSplitter (spans full window height)
+        self.splitter = QSplitter(Qt.Orientation.Horizontal, self)
+        self.splitter.setChildrenCollapsible(False)
+
+        # Left: Sidebar Page List
+        self.sidebar = SidebarPageList(self)
+        self.splitter.addWidget(self.sidebar)
+
+        # Center: Interactive Print Preview with floating controls
+        self.center_preview = CenterPreview(self)
+        self.splitter.addWidget(self.center_preview)
+
+        # Right: Settings & Document Inspector Panel
+        self.settings_panel = SettingsPanel(self)
+        self.splitter.addWidget(self.settings_panel)
+
+        # Proportions: 240px, flexible center, 310px
+        self.splitter.setStretchFactor(0, 0)
+        self.splitter.setStretchFactor(1, 1)
+        self.splitter.setStretchFactor(2, 0)
+        self.splitter.setSizes([240, 680, 310])
+
+        self.setCentralWidget(self.splitter)
+
+        # Compatibility aliases for legacy buttons
+        self.btn_open = self.settings_panel.btn_open_pdf
+        self.lbl_file_info = self.settings_panel.lbl_doc_stats
+        self.btn_theme_toggle = QPushButton(self)
+        self.btn_theme_toggle.setVisible(False)
+
+        # 2. Status Bar
+        self.status_bar = QStatusBar()
+        self.setStatusBar(self.status_bar)
+        self.status_bar.showMessage("Ready • Drag and drop a PDF file or open from the right panel")
+
+    def _connect_signals(self):
+        self.settings_panel.open_pdf_clicked.connect(self.open_file_dialog)
+
+        # Left Sidebar card click -> Updates Center Preview
+        self.sidebar.card_selected.connect(self.center_preview.set_sheet)
+
+        # Left Sidebar inversion -> Updates Center Preview
+        self.sidebar.inversion_changed.connect(self.center_preview.set_inverted_pages)
+
+        # Center Preview navigation -> Highlights sidebar card
+        self.center_preview.sheet_navigated.connect(self._on_preview_navigated)
+
+        # Right Settings Panel mode change -> Updates both Sidebar and Center Preview
+        self.settings_panel.mode_changed.connect(self._on_mode_changed)
+        self.settings_panel.options_changed.connect(self._on_options_changed)
+
+        # Action Buttons
+        self.settings_panel.print_clicked.connect(self.handle_print)
+        self.settings_panel.export_clicked.connect(self.handle_export)
+
+    def _setup_shortcuts(self):
+        open_action = QAction("Open", self)
+        open_action.setShortcut(QKeySequence("Ctrl+O"))
+        open_action.triggered.connect(self.open_file_dialog)
+        self.addAction(open_action)
+
+        print_action = QAction("Print", self)
+        print_action.setShortcut(QKeySequence("Ctrl+P"))
+        print_action.triggered.connect(self.handle_print)
+        self.addAction(print_action)
+
+        theme_action = QAction("Toggle Theme", self)
+        theme_action.setShortcut(QKeySequence("Ctrl+T"))
+        theme_action.triggered.connect(self.toggle_theme)
+        self.addAction(theme_action)
+
+    def _refresh_printers(self):
+        printers = utils.get_available_printers()
+        self.settings_panel.set_available_printers(printers)
+
+    def toggle_theme(self):
+        # Default is Dark mode
+        app = QApplication.instance()
+        self.current_theme = "dark"
+        apply_theme(app, "dark")
+
+    def open_file_dialog(self):
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Open PDF Document", "", "PDF Files (*.pdf)"
+        )
+        if file_path:
+            self.load_pdf(file_path)
+
+    def load_pdf(self, path: str):
+        if not os.path.isfile(path):
+            QMessageBox.warning(self, "Error", f"File not found: {path}")
+            return
+
+        self.pdf_doc.load(path)
+        self.total_pages = self.pdf_doc.pageCount()
+        self.current_file_path = path
+
+        filename = os.path.basename(path)
+        size_kb = os.path.getsize(path) / 1024
+        size_str = f"{size_kb / 1024:.1f} MB" if size_kb >= 1024 else f"{size_kb:.0f} KB"
+
+        # Update right panel document information
+        self.settings_panel.set_document_info(filename, self.total_pages, size_str)
+        self.status_bar.showMessage(f"Loaded: {filename} ({self.total_pages} pages)")
+
+        # Push document to components
+        self.sidebar.set_document(self.pdf_doc)
+        self.center_preview.set_document(self.pdf_doc)
+
+    def _on_mode_changed(self, mode: str):
+        self.sidebar.set_mode(mode)
+        self.center_preview.set_mode(mode)
+        self.status_bar.showMessage(f"Mode switched to: {mode}")
+
+    def _on_options_changed(self, options: dict):
+        self.center_preview.update_preview()
+
+    def _on_preview_navigated(self, sheet_idx: int, is_back: bool):
+        """When user navigates via center preview bottom bar, highlight the sidebar card."""
+        # Update sidebar selection to match
+        for i, card in enumerate(self.sidebar._cards):
+            if card.sheet_idx == sheet_idx:
+                self.sidebar._select_single(i)
+                # Scroll to the card
+                self.sidebar.scroll_area.ensureWidgetVisible(card)
+                break
+
+    def handle_print(self):
+        if not self.current_file_path or self.total_pages == 0:
+            QMessageBox.warning(self, "No Document", "Please open a PDF file before printing.")
+            return
+
+        from src.print_wizard import PrintWizardDialog
+        settings = self.settings_panel.get_settings()
+        wizard = PrintWizardDialog(
+            pdf_path=self.current_file_path,
+            settings=settings,
+            parent=self,
+        )
+        wizard.exec()
+
+    def handle_export(self):
+        if not self.current_file_path or self.total_pages == 0:
+            QMessageBox.warning(self, "No Document", "Please open a PDF file before exporting.")
+            return
+
+        settings = self.settings_panel.get_settings()
+        mode = settings["mode"]
+
+        save_path, _ = QFileDialog.getSaveFileName(
+            self,
+            f"Export Imposed PDF ({mode})",
+            f"imposed_{os.path.basename(self.current_file_path)}",
+            "PDF Files (*.pdf)",
+        )
+        if not save_path:
+            return
+
+        try:
+            self.status_bar.showMessage("Generating imposed PDF...")
+            QApplication.processEvents()
+
+            # Get per-page inversion set from sidebar
+            inverted_pages = self.sidebar.get_inverted_pages()
+            invert = inverted_pages if inverted_pages else False
+
+            if mode == "Booklet":
+                pdf_bytes = imposer.impose_booklet(
+                    self.current_file_path,
+                    invert=invert,
+                )
+            elif mode == "Manual Duplex":
+                pdf_bytes = imposer.impose_duplex_combined(
+                    self.current_file_path,
+                    invert=invert,
+                )
+            else:
+                pdf_bytes = imposer.impose_normal(
+                    self.current_file_path,
+                    invert=invert,
+                )
+
+            with open(save_path, "wb") as f:
+                f.write(pdf_bytes)
+
+            self.status_bar.showMessage(f"Exported successfully to: {os.path.basename(save_path)}")
+            QMessageBox.information(
+                self, "Export Complete", f"Imposed PDF successfully saved to:\n{save_path}"
+            )
+        except Exception as e:
+            QMessageBox.critical(self, "Export Error", f"Failed to export PDF:\n{e}")
+            self.status_bar.showMessage("Export failed.")
+
+    # Drag and Drop Support
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        if event.mimeData().hasUrls():
+            urls = event.mimeData().urls()
+            if any(url.toLocalFile().lower().endswith(".pdf") for url in urls):
+                event.acceptProposedAction()
+
+    def dropEvent(self, event: QDropEvent):
+        for url in event.mimeData().urls():
+            file_path = url.toLocalFile()
+            if file_path.lower().endswith(".pdf"):
+                self.load_pdf(file_path)
+                break
+
+
+def main():
+    app = QApplication(sys.argv)
+    app.setApplicationName("PDF Duplex & Booklet Studio")
+    load_saved_theme(app)
+
+    window = MainWindow()
+    window.show()
+    sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    main()

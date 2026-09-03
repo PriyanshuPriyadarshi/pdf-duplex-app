@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pdf-duplex-app"
+version = "0.1.0"
+description = "A Python/PyQt6 GUI application for manual duplex and booklet printing on Linux"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [
+    {name = "Your Name", email = "you@example.com"}
+]
+keywords = ["pdf", "printing", "duplex", "booklet", "gui", "pyqt6"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Multimedia :: Graphics",
+    "Topic :: Printing",
+]
+dependencies = [
+    "PyQt6>=6.5",
+    "pypdf>=3.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/your-username/pdf-duplex-app"
+Tracker = "https://github.com/your-username/pdf-duplex-app/issues"
+
+[project.scripts]
+pdf-duplex-app = "run:main"

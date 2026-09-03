@@ -1,0 +1,16 @@
+#!/bin/bash
+# AppRun entry point for the AppImage
+
+SELF=$(readlink -f "$0")
+HERE=${SELF%/*}
+
+# Set up environment
+export PATH="$HERE/venv/bin:$PATH"
+export PYTHONPATH="$HERE/venv/lib/python3.11/site-packages:$PYTHONPATH"
+export QT_QPA_PLATFORM=xcb
+
+# Ensure we can find Qt plugins
+export QT_PLUGIN_PATH="$HERE/venv/lib/python3.11/site-packages/PyQt6/Qt6/plugins:$QT_PLUGIN_PATH"
+
+# Run the application
+exec pdf-duplex-app "$@"

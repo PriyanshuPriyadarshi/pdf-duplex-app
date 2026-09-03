@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>pdf-duplex-app</id>
+  <name>PDF Duplex/Booklet Printer</name>
+  <summary>A Python/PyQt6 GUI application for manual duplex and booklet printing on Linux</summary>
+  <description>
+    <p>PDF Duplex/Booklet Printer is a GUI application for printing PDFs in various modes:
+    Normal, Manual Duplex (flip and reinsert), and Booklet (2 pages per sheet for folding).</p>
+    <p>Features:</p>
+    <ul>
+      <li>Load and preview PDF files</li>
+      <li>Manual duplex printing workflow with flip prompt</li>
+      <li>Booklet imposition for folded printing</li>
+      <li>CUPS integration via lp command</li>
+      <li>High-quality Qt PDF preview</li>
+    </ul>
+  </description>
+  <project_license>MIT</project_license>
+  <categories>
+    <category>Office</category>
+    <category>Printing</category>
+  </categories>
+  <keywords>
+    <keyword>PDF</keyword>
+    <keyword>printing</keyword>
+    <keyword>duplex</keyword>
+    <keyword>booklet</keyword>
+  </keywords>
+  <url type="homepage">https://github.com/your-username/pdf-duplex-app</url>
+  <url type="bugtracker">https://github.com/your-username/pdf-duplex-app/issues</url>
+  <icon type="stock">pdf-duplex-app</icon>
+  <provides>
+    <binary>pdf-duplex-app</binary>
+  </provides>
+  <screenshots>
+  </screenshots>
+</component>
