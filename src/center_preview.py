@@ -255,6 +255,33 @@ class CenterPreview(QWidget):
 
     # ── Events ──
 
+    def eventFilter(self, obj, event):
+        from PyQt6.QtCore import QEvent
+        from PyQt6.QtGui import Qt
+        if event.type() == QEvent.Type.MouseButtonPress:
+            if event.button() == Qt.MouseButton.LeftButton:
+                self._panning = True
+                self._last_mouse_pos = event.globalPosition().toPoint()
+                self.setCursor(Qt.CursorShape.ClosedHandCursor)
+                return True
+        elif event.type() == QEvent.Type.MouseMove:
+            if getattr(self, '_panning', False) and self._last_mouse_pos:
+                delta = event.globalPosition().toPoint() - self._last_mouse_pos
+                self._last_mouse_pos = event.globalPosition().toPoint()
+                
+                h_bar = self.scroll_area.horizontalScrollBar()
+                v_bar = self.scroll_area.verticalScrollBar()
+                
+                h_bar.setValue(h_bar.value() - delta.x())
+                v_bar.setValue(v_bar.value() - delta.y())
+                return True
+        elif event.type() == QEvent.Type.MouseButtonRelease:
+            if event.button() == Qt.MouseButton.LeftButton and getattr(self, '_panning', False):
+                self._panning = False
+                self.unsetCursor()
+                return True
+        return super().eventFilter(obj, event)
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._reposition_floating_widgets()

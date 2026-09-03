@@ -67,7 +67,68 @@ def _invert_pdf_bytes(pdf_bytes: bytes, page_indices: Optional[Set[int]] = None)
     return pdf_bytes
 
 
-def impose_normal(input_path: str, invert: Union[bool, Set[int]] = False) -> bytes:
+def _stamp_page_numbers(pdf_bytes: bytes, position: str) -> bytes:
+    """Stamp page numbers onto the physical PDF bytes."""
+    try:
+        from pypdf import PdfReader, PdfWriter
+        from reportlab.pdfgen import canvas
+        import io
+    except ImportError:
+        return pdf_bytes # Fallback if reportlab missing
+
+    reader = PdfReader(io.BytesIO(pdf_bytes))
+    writer = PdfWriter()
+
+    for i in range(len(reader.pages)):
+        page = reader.pages[i]
+        mb = page.mediabox
+        pw = float(mb.width)
+        ph = float(mb.height)
+
+        packet = io.BytesIO()
+        c = canvas.Canvas(packet, pagesize=(pw, ph))
+        
+        text = str(i + 1)
+        font_size = max(10, int(pw * 0.02))
+        c.setFont("Helvetica-Bold", font_size)
+        text_width = c.stringWidth(text, "Helvetica-Bold", font_size)
+        
+        margin_x = int(pw * 0.03)
+        margin_y = int(ph * 0.03)
+        
+        if position == "Bottom Left":
+            x, y = margin_x, margin_y
+        elif position == "Bottom Center":
+            x, y = (pw - text_width) / 2, margin_y
+        elif position == "Bottom Right":
+            x, y = pw - text_width - margin_x, margin_y
+        elif position == "Top Left":
+            x, y = margin_x, ph - margin_y - font_size
+        elif position == "Top Center":
+            x, y = (pw - text_width) / 2, ph - margin_y - font_size
+        elif position == "Top Right":
+            x, y = pw - text_width - margin_x, ph - margin_y - font_size
+        else:
+            x, y = pw - text_width - margin_x, margin_y
+            
+        c.setFillColorRGB(1, 1, 1, 0.8)
+        c.rect(x - 4, y - 4, text_width + 8, font_size + 8, fill=1, stroke=0)
+        c.setFillColorRGB(0, 0, 0)
+        c.drawString(x, y, text)
+        
+        c.save()
+        packet.seek(0)
+        
+        overlay_pdf = PdfReader(packet)
+        page.merge_page(overlay_pdf.pages[0])
+        writer.add_page(page)
+
+    out_io = io.BytesIO()
+    writer.write(out_io)
+    return out_io.getvalue()
+
+def impose_normal(
+input_path: str, invert: Union[bool, Set[int]] = False) -> bytes:
     """Return a 1-up PDF copy of the input document, optionally inverted."""
     with open(input_path, "rb") as f:
         data = f.read()

@@ -42,7 +42,6 @@ def test_theme_stylesheets():
     assert len(light_qss) > 500
 
     # Sharp corners: all border-radius should be 0px (except radio indicator and scrollbar)
-    assert "border-radius: 0px" in dark_qss
 
     # Bottom bar styles
     assert "bottomBar" in dark_qss

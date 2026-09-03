@@ -38,6 +38,8 @@ class PrintWizardDialog(QDialog):
         self.mode = settings.get("mode", "Normal")
         self.reverse_backs = settings.get("reverse_backs", False)
         self.invert = settings.get("invert_colors", False)
+        self.print_page_numbers = settings.get("print_page_numbers", False)
+        self.page_number_pos = settings.get("page_number_pos", "Bottom Right")
         self.printer = settings.get("printer")
         self.copies = settings.get("copies", 1)
 
@@ -116,7 +118,7 @@ class PrintWizardDialog(QDialog):
     def _prepare_jobs(self):
         try:
             if self.mode == "Normal":
-                self.pass1_bytes = imposer.impose_normal(self.pdf_path, self.invert)
+                self.pass1_bytes = imposer.impose_normal(self.pdf_path, self.invert, self.print_page_numbers, self.page_number_pos)
                 self.lbl_step.setText("Single-Sided Print")
                 self.lbl_title.setText("Print Document")
                 self.lbl_instructions.setText(
@@ -127,13 +129,13 @@ class PrintWizardDialog(QDialog):
 
             elif self.mode == "Manual Duplex":
                 self.pass1_bytes, self.pass2_bytes = imposer.get_duplex_passes(
-                    self.pdf_path, self.reverse_backs, self.invert
+                    self.pdf_path, self.reverse_backs, self.invert, self.print_page_numbers, self.page_number_pos
                 )
                 self._show_step_1()
 
             elif self.mode == "Booklet":
                 self.pass1_bytes, self.pass2_bytes = imposer.get_booklet_passes(
-                    self.pdf_path, self.reverse_backs, self.invert
+                    self.pdf_path, self.reverse_backs, self.invert, self.print_page_numbers, self.page_number_pos
                 )
                 self._show_step_1()
 

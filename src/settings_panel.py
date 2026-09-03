@@ -197,14 +197,28 @@ class SettingsPanel(QWidget):
             self.radio_normal.setChecked(True)
 
     def get_settings(self) -> dict:
+        # Prevent accessing widgets before setup completes
+        if not hasattr(self, "combo_printer") or not hasattr(self, "check_page_numbers"):
+            return {
+                "mode": "Normal",
+                "flip_edge": "long",
+                "reverse_backs": False,
+                "printer": "Save as PDF File",
+                "copies": 1,
+                "invert_colors": False,
+                "print_page_numbers": False,
+                "page_number_pos": "Bottom Right"
+            }
+
         return {
             "mode": self.get_current_mode(),
             "flip_edge": "short" if "Short" in self.combo_flip.currentText() else "long",
             "reverse_backs": self.chk_reverse_backs.isChecked(),
-            "invert_colors": False,
             "printer": self.combo_printer.currentText(),
-            "paper_size": self.combo_paper.currentText(),
             "copies": self.spin_copies.value(),
+            "invert_colors": False,
+            "print_page_numbers": self.check_page_numbers.isChecked(),
+            "page_number_pos": self.combo_page_num_pos.currentText(),
         }
 
     def set_available_printers(self, printers: List[str]):

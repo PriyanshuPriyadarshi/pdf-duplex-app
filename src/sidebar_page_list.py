@@ -39,6 +39,7 @@ class ThumbnailCard(QFrame):
         parent: Optional[QWidget] = None,
     ):
         super().__init__(parent)
+        self.setObjectName("thumbnailCard")
         self.sheet_idx = sheet_idx
         self.is_back = is_back
         self.is_selected = False
@@ -129,22 +130,22 @@ class ThumbnailCard(QFrame):
     def update_style(self):
         if self.is_selected:
             self.setStyleSheet("""
-                QFrame {
-                    background-color: #382424;
+                QFrame#thumbnailCard {
+                    background-color: #212126;
                     border: 2px solid #E64B3D;
-                    border-radius: 0px;
+                    border-radius: 8px;
                 }
             """)
         else:
             self.setStyleSheet("""
-                QFrame {
+                QFrame#thumbnailCard {
                     background-color: #212126;
-                    border: 1px solid #3e4451;
-                    border-radius: 0px;
+                    border: 1px solid #36363D;
+                    border-radius: 8px;
                 }
-                QFrame:hover {
+                QFrame#thumbnailCard:hover {
                     background-color: #28282E;
-                    border: 1px solid #5c6370;
+                    border: 1px solid #636363;
                 }
             """)
 
@@ -174,6 +175,7 @@ class SidebarPageList(QWidget):
 
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
+        self.setObjectName("thumbnailCard")
         self.setObjectName("sidebarPanel")
         self.setMinimumWidth(230)
 
