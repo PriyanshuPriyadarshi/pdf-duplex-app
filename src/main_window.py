@@ -222,6 +222,12 @@ class MainWindow(QMainWindow):
 
         from src.print_wizard import PrintWizardDialog
         settings = self.settings_panel.get_settings()
+        
+        # Inject per-page inversion set
+        inverted_pages = self.sidebar.get_inverted_pages()
+        if inverted_pages:
+            settings["invert_colors"] = inverted_pages
+            
         wizard = PrintWizardDialog(
             pdf_path=self.current_file_path,
             settings=settings,
@@ -247,7 +253,10 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            self.status_bar.showMessage("Generating imposed PDF...")
+            # UI Feedback
+            self.settings_panel.btn_export.setEnabled(False)
+            self.settings_panel.btn_export.setText("⌛ Generating...")
+            self.status_bar.showMessage("Generating imposed PDF (this may take a moment)...")
             QApplication.processEvents()
 
             # Get per-page inversion set from sidebar
@@ -280,6 +289,9 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Export Error", f"Failed to export PDF:\n{e}")
             self.status_bar.showMessage("Export failed.")
+        finally:
+            self.settings_panel.btn_export.setEnabled(True)
+            self.settings_panel.btn_export.setText("\u2913  Export Imposed PDF...")
 
     # Drag and Drop Support
     def dragEnterEvent(self, event: QDragEnterEvent):
