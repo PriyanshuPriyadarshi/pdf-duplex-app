@@ -120,7 +120,7 @@ fi
 echo -e "${BLUE}==>${NC} Creating command-line launcher at ${BIN_DIR}/${APP_NAME}..."
 cat > "${BIN_DIR}/${APP_NAME}" <<EOF
 #!/usr/bin/env bash
-exec "${VENV_DIR}/bin/python3" -m src.main_window "\$@"
+exec "${VENV_DIR}/bin/python3" "${APP_SRC}/run.py" "\$@"
 EOF
 chmod +x "${BIN_DIR}/${APP_NAME}"
 
