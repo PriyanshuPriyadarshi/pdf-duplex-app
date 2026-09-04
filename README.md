@@ -3,7 +3,7 @@
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![PyQt6](https://img.shields.io/badge/GUI-PyQt6-41CD52.svg?logo=qt&logoColor=white)](https://www.riverbankcomputing.com/software/pyqt/)
 [![Platform](https://img.shields.io/badge/Platform-Linux-FCC624.svg?logo=linux&logoColor=black)](https://kernel.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![CUPS Ready](https://img.shields.io/badge/Printing-CUPS-007acc.svg)](https://www.cups.org/)
 
 A modern, high-performance Linux desktop workstation designed for **manual duplex printing** (printing double-sided on single-sided home and office printers) and **folded booklet creation** with zero aspect-ratio distortion, per-page ink saver inversion, and direct system PDF integration.
@@ -186,4 +186,4 @@ pdf-duplex-app/
 
 ## 📄 License
 
-This project is open-source software licensed under the **[MIT License](LICENSE)**.
+This project is open-source software licensed under the **[GNU General Public License v3.0 (GPL-3.0)](LICENSE)**.

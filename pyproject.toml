@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "A Python/PyQt6 GUI application for manual duplex and booklet printing on Linux"
 readme = "README.md"
 requires-python = ">=3.11"
-license = {text = "MIT"}
+license = {text = "GPL-3.0-or-later"}
 authors = [
     {name = "Your Name", email = "you@example.com"}
 ]
@@ -16,7 +16,7 @@ keywords = ["pdf", "printing", "duplex", "booklet", "gui", "pyqt6"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: End Users/Desktop",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",

@@ -26,3 +26,14 @@ venv/
 ENV/
 env/
 .env
+
+# AppImage & Build artifacts
+AppDir/
+squashfs-root/
+*.AppImage
+linuxdeploy*
+appimagetool*
+
+# Temporary files & documents
+*.pdf
+*.log
