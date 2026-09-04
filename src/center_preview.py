@@ -44,6 +44,7 @@ class CenterPreview(QWidget):
         self._fit_mode = "page"  # "page", "width", "custom"
         self._inverted_pages: Set[int] = set()
         self._total_sheets = 0
+        self._presentation_mode = False
 
         self._setup_ui()
         self._setup_bottom_bar()
@@ -203,6 +204,11 @@ class CenterPreview(QWidget):
         self._current_sheet = 0
         self._current_is_back = False
         self.update_preview()
+
+    def set_presentation_mode(self, enabled: bool):
+        if self._presentation_mode != enabled:
+            self._presentation_mode = enabled
+            self.update_preview()
 
     def set_sheet(self, sheet_idx: int, is_back: bool):
         self._current_sheet = sheet_idx
@@ -385,19 +391,34 @@ class CenterPreview(QWidget):
             def pg_str(p):
                 return f"P{p + 1}" if p < page_count else "--"
 
-            self.floating_info_pill.setText(
-                f"Sheet {s + 1} of {sheets} \u2022 "
-                f"Front: [{pg_str(lf)}|{pg_str(rf)}]  "
-                f"Back: [{pg_str(lb)}|{pg_str(rb)}]"
-            )
-            self._render_booklet_full_sheet(
-                lf if lf < page_count else None,
-                rf if rf < page_count else None,
-                lb if lb < page_count else None,
-                rb if rb < page_count else None,
-                viewport_w,
-                viewport_h,
-            )
+            if self._presentation_mode:
+                self.floating_info_pill.setText(
+                    f"Sheet {s + 1} of {sheets} • Pres. Booklet • "
+                    f"Front: [Top: {pg_str(lf)} | Bot: {pg_str(rf)}]  "
+                    f"Back: [Top: {pg_str(lb)} | Bot: {pg_str(rb)}]"
+                )
+                self._render_presentation_booklet_sheet(
+                    lf if lf < page_count else None,
+                    rf if rf < page_count else None,
+                    lb if lb < page_count else None,
+                    rb if rb < page_count else None,
+                    viewport_w,
+                    viewport_h,
+                )
+            else:
+                self.floating_info_pill.setText(
+                    f"Sheet {s + 1} of {sheets} \u2022 "
+                    f"Front: [{pg_str(lf)}|{pg_str(rf)}]  "
+                    f"Back: [{pg_str(lb)}|{pg_str(rb)}]"
+                )
+                self._render_booklet_full_sheet(
+                    lf if lf < page_count else None,
+                    rf if rf < page_count else None,
+                    lb if lb < page_count else None,
+                    rb if rb < page_count else None,
+                    viewport_w,
+                    viewport_h,
+                )
 
         self._update_nav_controls()
         self._reposition_floating_widgets()
@@ -657,6 +678,116 @@ class CenterPreview(QWidget):
         painter.drawLine(half_w, page_y_bot, half_w, page_y_bot + page_h_bot)
 
         # Right Back
+        self._render_page_in_composite(
+            painter, rb,
+            half_w + margin, page_y_bot,
+            half_w - margin * 2, page_h_bot,
+        )
+
+        painter.end()
+
+        self.paper_label.setPixmap(composite)
+        self.paper_label.setFixedSize(target_w, target_h)
+
+    def _render_presentation_booklet_sheet(
+        self,
+        lf: Optional[int],
+        rf: Optional[int],
+        lb: Optional[int],
+        rb: Optional[int],
+        max_w: int,
+        max_h: int,
+    ):
+        """Render presentation booklet sheets (Front and Back) side by side.
+        Left half: FRONT SIDE with Top slide (LF) and Bottom slide (RF).
+        Right half: BACK SIDE with Top slide (LB) and Bottom slide (RB).
+        Each side is a Portrait sheet with horizontal spine fold across the middle.
+        """
+        page_size = self._doc.pagePointSize(0) if self._doc.pageCount() > 0 else None
+        if page_size and page_size.width() > 0 and page_size.height() > 0:
+            pw, ph = page_size.width(), page_size.height()
+            single_w = pw
+            single_h = max(pw * 1.4142, ph * 2.0) if pw >= ph else ph * 2.0
+        else:
+            single_w = 595
+            single_h = 842
+
+        # Two portrait sheets side-by-side
+        canvas_w = single_w * 2
+        canvas_h = single_h
+
+        if self._fit_mode == "page":
+            scale = min(max_w / canvas_w, max_h / canvas_h)
+        elif self._fit_mode == "width":
+            scale = max_w / canvas_w
+        else:
+            scale = min(max_w / canvas_w, max_h / canvas_h) * self._zoom_factor
+
+        target_w = int(canvas_w * scale)
+        target_h = int(canvas_h * scale)
+
+        composite = QPixmap(target_w, target_h)
+        composite.fill(QColor("#28282E"))
+
+        painter = QPainter(composite)
+        half_w = target_w // 2
+        half_h = target_h // 2
+        margin = 6
+        label_h = 18
+
+        # ── LEFT HALF: FRONT SIDE (Portrait: Top LF / Bottom RF) ──
+        painter.setFont(QFont("sans-serif", 10, QFont.Weight.Bold))
+        painter.setPen(QColor("#E64B3D"))
+        painter.drawText(margin, 14, "FRONT SIDE (T/B)")
+
+        page_y_top = label_h + 4
+        page_h_slot = half_h - page_y_top - margin
+
+        # Top Front (LF)
+        self._render_page_in_composite(
+            painter, lf,
+            margin, page_y_top,
+            half_w - margin * 2, page_h_slot,
+        )
+
+        # Horizontal spine fold line (Front)
+        pen = QPen(QColor("#E64B3D"))
+        pen.setStyle(Qt.PenStyle.DashLine)
+        pen.setWidth(1)
+        painter.setPen(pen)
+        painter.drawLine(margin, half_h, half_w - margin, half_h)
+
+        # Bottom Front (RF)
+        page_y_bot = half_h + label_h + 4
+        page_h_bot = target_h - page_y_bot - margin
+        self._render_page_in_composite(
+            painter, rf,
+            margin, page_y_bot,
+            half_w - margin * 2, page_h_bot,
+        )
+
+        # ── VERTICAL DIVIDER BETWEEN FRONT AND BACK SHEETS ──
+        pen_div = QPen(QColor("#888890"), 1, Qt.PenStyle.DashDotLine)
+        painter.setPen(pen_div)
+        painter.drawLine(half_w, margin, half_w, target_h - margin)
+
+        # ── RIGHT HALF: BACK SIDE (Portrait: Top LB / Bottom RB) ──
+        painter.setFont(QFont("sans-serif", 10, QFont.Weight.Bold))
+        painter.setPen(QColor("#888890"))
+        painter.drawText(half_w + margin, 14, "BACK SIDE (T/B)")
+
+        # Top Back (LB)
+        self._render_page_in_composite(
+            painter, lb,
+            half_w + margin, page_y_top,
+            half_w - margin * 2, page_h_slot,
+        )
+
+        # Horizontal spine fold line (Back)
+        painter.setPen(pen)
+        painter.drawLine(half_w + margin, half_h, target_w - margin, half_h)
+
+        # Bottom Back (RB)
         self._render_page_in_composite(
             painter, rb,
             half_w + margin, page_y_bot,

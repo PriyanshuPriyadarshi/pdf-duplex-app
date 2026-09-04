@@ -94,6 +94,19 @@ class SettingsPanel(QWidget):
         mode_layout.addWidget(self.radio_normal)
         mode_layout.addWidget(self.radio_duplex)
         mode_layout.addWidget(self.radio_booklet)
+
+        self.check_presentation_booklet = QCheckBox("Presentation Print Booklet Mode")
+        self.check_presentation_booklet.setObjectName("presentationCheck")
+        self.check_presentation_booklet.setToolTip(
+            "Keep slides on top and bottom instead of side by side to maximize A4 space for widescreen PPT slides."
+        )
+        self.check_presentation_booklet.setStyleSheet("margin-left: 18px; font-size: 11px; color: #abb2bf;")
+        self.check_presentation_booklet.setChecked(False)
+        self.check_presentation_booklet.setEnabled(False)
+        self.check_presentation_booklet.clicked.connect(self._on_presentation_clicked)
+        self.check_presentation_booklet.stateChanged.connect(lambda: self.options_changed.emit(self.get_settings()))
+        mode_layout.addWidget(self.check_presentation_booklet)
+
         layout.addWidget(mode_box)
 
         # Page Numbers
@@ -185,10 +198,21 @@ class SettingsPanel(QWidget):
         self.lbl_doc_name.setText(filename)
         self.lbl_doc_stats.setText(f"{total_pages} pages • {size_str}")
 
+    def _on_presentation_clicked(self):
+        if self.check_presentation_booklet.isChecked() and not self.radio_booklet.isChecked():
+            self.radio_booklet.setChecked(True)
+
     def _on_mode_toggled(self):
         mode = self.get_current_mode()
         
         is_duplex = mode in ("Manual Duplex", "Booklet")
+        is_booklet = mode == "Booklet"
+        self.check_presentation_booklet.setEnabled(is_booklet)
+        if not is_booklet:
+            self.check_presentation_booklet.setStyleSheet("margin-left: 18px; font-size: 11px; color: #5c6370;")
+        else:
+            self.check_presentation_booklet.setStyleSheet("margin-left: 18px; font-size: 11px; color: #abb2bf;")
+
         self.btn_open_normal.setVisible(not is_duplex)
         self.btn_open_fronts.setVisible(is_duplex)
         # Only show backs & animation if fronts was clicked (we will handle that externally, but reset here)
@@ -216,6 +240,13 @@ class SettingsPanel(QWidget):
         else:
             self.radio_normal.setChecked(True)
 
+    def is_presentation_booklet(self) -> bool:
+        return hasattr(self, "check_presentation_booklet") and self.check_presentation_booklet.isChecked()
+
+    def set_presentation_booklet(self, enabled: bool):
+        if hasattr(self, "check_presentation_booklet"):
+            self.check_presentation_booklet.setChecked(enabled)
+
     def get_settings(self) -> dict:
         if not hasattr(self, "check_page_numbers"):
             return {
@@ -224,7 +255,8 @@ class SettingsPanel(QWidget):
                 "reverse_backs": False,
                 "invert_colors": False,
                 "print_page_numbers": False,
-                "page_number_pos": "Bottom Right"
+                "page_number_pos": "Bottom Right",
+                "presentation_booklet": False,
             }
 
         return {
@@ -234,6 +266,11 @@ class SettingsPanel(QWidget):
             "invert_colors": False,
             "print_page_numbers": self.check_page_numbers.isChecked(),
             "page_number_pos": self.combo_page_num_pos.currentText(),
+            "presentation_booklet": (
+                self.check_presentation_booklet.isChecked()
+                if hasattr(self, "check_presentation_booklet")
+                else False
+            ),
         }
 
     def set_available_printers(self, printers: List[str]):

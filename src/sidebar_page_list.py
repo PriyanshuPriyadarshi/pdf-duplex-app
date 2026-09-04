@@ -185,6 +185,7 @@ class SidebarPageList(QWidget):
 
         self._doc: Optional[QPdfDocument] = None
         self._mode = "Normal"  # Normal, Manual Duplex, Booklet
+        self._presentation_mode = False
         self._cards: List[ThumbnailCard] = []
         self._selected_indices: List[int] = []  # indices into self._cards
         self._last_clicked_index: int = -1
@@ -331,6 +332,12 @@ class SidebarPageList(QWidget):
         if self._mode != mode:
             self._mode = mode
             self.rebuild_list()
+
+    def set_presentation_mode(self, enabled: bool):
+        if self._presentation_mode != enabled:
+            self._presentation_mode = enabled
+            if self._mode == "Booklet":
+                self.rebuild_list()
 
     def get_inverted_pages(self) -> Set[int]:
         return set(self._inverted_pages)
@@ -536,9 +543,14 @@ class SidebarPageList(QWidget):
             def val_or_none(p):
                 return p if p < page_count else None
 
-            pix = self._render_booklet_4up_thumb(
-                val_or_none(lf), val_or_none(rf), val_or_none(lb), val_or_none(rb)
-            )
+            if self._presentation_mode:
+                pix = self._render_presentation_booklet_thumb(
+                    val_or_none(lf), val_or_none(rf), val_or_none(lb), val_or_none(rb)
+                )
+            else:
+                pix = self._render_booklet_4up_thumb(
+                    val_or_none(lf), val_or_none(rf), val_or_none(lb), val_or_none(rb)
+                )
             card.update_thumbnail(pix)
 
     # ── Card Builders ──
@@ -616,12 +628,20 @@ class SidebarPageList(QWidget):
             lb_idx = val_or_none(lb)
             rb_idx = val_or_none(rb)
 
-            thumb = self._render_booklet_4up_thumb(lf_idx, rf_idx, lb_idx, rb_idx)
-
-            page_parts = []
-            for label, idx in [("LF", lf_idx), ("RF", rf_idx), ("LB", lb_idx), ("RB", rb_idx)]:
-                page_parts.append(f"{label}:P{idx + 1}" if idx is not None else f"{label}:--")
-            pages_str = "  ".join(page_parts)
+            if self._presentation_mode:
+                thumb = self._render_presentation_booklet_thumb(lf_idx, rf_idx, lb_idx, rb_idx)
+                subtitle = "Top / Bottom"
+                page_parts = []
+                for label, idx in [("T-F", lf_idx), ("B-F", rf_idx), ("T-B", lb_idx), ("B-B", rb_idx)]:
+                    page_parts.append(f"{label}:P{idx + 1}" if idx is not None else f"{label}:--")
+                pages_str = " ".join(page_parts)
+            else:
+                thumb = self._render_booklet_4up_thumb(lf_idx, rf_idx, lb_idx, rb_idx)
+                subtitle = "4 Pages"
+                page_parts = []
+                for label, idx in [("LF", lf_idx), ("RF", rf_idx), ("LB", lb_idx), ("RB", rb_idx)]:
+                    page_parts.append(f"{label}:P{idx + 1}" if idx is not None else f"{label}:--")
+                pages_str = "  ".join(page_parts)
 
             # Check inversion for all non-None pages
             card_pages = [p for p in [lf_idx, rf_idx, lb_idx, rb_idx] if p is not None]
@@ -631,7 +651,7 @@ class SidebarPageList(QWidget):
                 sheet_idx=s,
                 is_back=False,
                 title=f"Sheet {s + 1}",
-                subtitle="4 Pages",
+                subtitle=subtitle,
                 page_numbers=pages_str,
                 pixmap=thumb,
             )
@@ -816,6 +836,63 @@ class SidebarPageList(QWidget):
 
         # Right Back
         self._draw_page_thumbnail(painter, rb, w // 2 + 4, 84, half_w, row_h)
+
+        painter.end()
+        return pix
+
+    def _render_presentation_booklet_thumb(
+        self,
+        lf: Optional[int],
+        rf: Optional[int],
+        lb: Optional[int],
+        rb: Optional[int],
+    ) -> QPixmap:
+        """
+        Render 4 pages arranged for presentation booklet (top and bottom fold):
+        - Left half: Front Sheet [Top: LF | Bottom: RF] with horizontal fold
+        - Right half: Back Sheet [Top: LB | Bottom: RB] with horizontal fold
+        """
+        w, h = 180, 140
+        pix = QPixmap(w, h)
+        pix.fill(QColor("#212126"))
+
+        painter = QPainter(pix)
+        half_w = (w - 18) // 2
+        slot_h = 50
+
+        # 1. LEFT COLUMN: FRONT SHEET (Portrait)
+        painter.setFont(QFont("sans-serif", 7, QFont.Weight.Bold))
+        painter.setPen(QColor("#E64B3D"))
+        painter.drawText(6, 11, "FRONT (T/B)")
+
+        # Top Front (LF)
+        self._draw_page_thumbnail(painter, lf, 6, 14, half_w, slot_h)
+
+        # Horizontal fold line (Front)
+        painter.setPen(QPen(QColor("#E64B3D"), 1, Qt.PenStyle.DashLine))
+        painter.drawLine(6, 14 + slot_h + 3, 6 + half_w, 14 + slot_h + 3)
+
+        # Bottom Front (RF)
+        self._draw_page_thumbnail(painter, rf, 6, 14 + slot_h + 6, half_w, slot_h)
+
+        # 2. VERTICAL SHEET DIVIDER
+        painter.setPen(QPen(QColor("#3e4451"), 1))
+        painter.drawLine(w // 2, 4, w // 2, h - 4)
+
+        # 3. RIGHT COLUMN: BACK SHEET (Portrait)
+        painter.setFont(QFont("sans-serif", 7, QFont.Weight.Bold))
+        painter.setPen(QColor("#5c6370"))
+        painter.drawText(w // 2 + 6, 11, "BACK (T/B)")
+
+        # Top Back (LB)
+        self._draw_page_thumbnail(painter, lb, w // 2 + 6, 14, half_w, slot_h)
+
+        # Horizontal fold line (Back)
+        painter.setPen(QPen(QColor("#E64B3D"), 1, Qt.PenStyle.DashLine))
+        painter.drawLine(w // 2 + 6, 14 + slot_h + 3, w // 2 + 6 + half_w, 14 + slot_h + 3)
+
+        # Bottom Back (RB)
+        self._draw_page_thumbnail(painter, rb, w // 2 + 6, 14 + slot_h + 6, half_w, slot_h)
 
         painter.end()
         return pix

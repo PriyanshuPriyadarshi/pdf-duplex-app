@@ -75,7 +75,11 @@ def _invert_pdf_bytes(pdf_bytes: bytes, page_indices: Optional[Set[int]] = None)
     return out.getvalue()
 
 
-def _stamp_page_numbers(pdf_bytes: bytes, position: str) -> bytes:
+def _stamp_page_numbers(
+    pdf_bytes: bytes,
+    position: str = "Bottom Right",
+    page_numbers: Optional[List[str]] = None,
+) -> bytes:
     """Stamp page numbers onto the physical PDF bytes."""
     try:
         from pypdf import PdfReader, PdfWriter
@@ -96,7 +100,7 @@ def _stamp_page_numbers(pdf_bytes: bytes, position: str) -> bytes:
         packet = io.BytesIO()
         c = canvas.Canvas(packet, pagesize=(pw, ph))
         
-        text = str(i + 1)
+        text = page_numbers[i] if (page_numbers and i < len(page_numbers)) else str(i + 1)
         font_size = max(10, int(pw * 0.02))
         c.setFont("Helvetica-Bold", font_size)
         text_width = c.stringWidth(text, "Helvetica-Bold", font_size)
@@ -138,20 +142,22 @@ def _stamp_page_numbers(pdf_bytes: bytes, position: str) -> bytes:
 def _prepare_input_reader(
     input_path: str,
     invert: Union[bool, Set[int]] = False,
+    print_page_numbers: bool = False,
+    page_number_pos: str = "Bottom Right",
 ) -> PdfReader:
-    """Read input PDF, applying per-page inversion to input pages if requested."""
-    if not invert:
-        return PdfReader(input_path)
-
+    """Read input PDF, applying per-page inversion and optional page numbers to input pages."""
     with open(input_path, "rb") as f:
         data = f.read()
 
-    if isinstance(invert, set):
-        if not invert:
-            return PdfReader(io.BytesIO(data))
-        data = _invert_pdf_bytes(data, page_indices=invert)
-    else:
-        data = _invert_pdf_bytes(data)
+    if invert:
+        if isinstance(invert, set):
+            if invert:
+                data = _invert_pdf_bytes(data, page_indices=invert)
+        else:
+            data = _invert_pdf_bytes(data)
+
+    if print_page_numbers:
+        data = _stamp_page_numbers(data, position=page_number_pos)
 
     return PdfReader(io.BytesIO(data))
 
@@ -162,7 +168,7 @@ def impose_normal(
     print_page_numbers: bool = False,
     page_number_pos: str = "Bottom Right",
 ) -> bytes:
-    """Return a 1-up PDF copy of the input document, optionally inverted."""
+    """Return a 1-up PDF copy of the input document, optionally inverted and with page numbers."""
     with open(input_path, "rb") as f:
         data = f.read()
 
@@ -183,14 +189,23 @@ def get_duplex_passes(
     input_path: str,
     reverse_backs: bool = False,
     invert: Union[bool, Set[int]] = False,
+    print_page_numbers: bool = False,
+    page_number_pos: str = "Bottom Right",
 ) -> Tuple[bytes, bytes]:
     """
     Split document into two distinct print streams for manual duplex:
     - Pass 1 (Fronts): Pages 1, 3, 5, 7... (0-indexed: 0, 2, 4, 6...)
     - Pass 2 (Backs): Pages 2, 4, 6, 8... (0-indexed: 1, 3, 5, 7...)
     If reverse_backs is True, Pass 2 page order is inverted for face-up output trays.
+    Page numbers are stamped on input pages before splitting so that front and back
+    form a continuous combined sequence matching the selected pages.
     """
-    reader = _prepare_input_reader(input_path, invert=invert)
+    reader = _prepare_input_reader(
+        input_path,
+        invert=invert,
+        print_page_numbers=print_page_numbers,
+        page_number_pos=page_number_pos,
+    )
     total_pages = len(reader.pages)
 
     writer_front = PdfWriter()
@@ -227,7 +242,13 @@ def impose_duplex_combined(
     page_number_pos: str = "Bottom Right",
 ) -> bytes:
     """Return a single PDF with Pass 1 (Fronts) followed by Pass 2 (Backs)."""
-    front_bytes, back_bytes = get_duplex_passes(input_path, reverse_backs, invert=invert)
+    front_bytes, back_bytes = get_duplex_passes(
+        input_path,
+        reverse_backs=reverse_backs,
+        invert=invert,
+        print_page_numbers=print_page_numbers,
+        page_number_pos=page_number_pos,
+    )
     r_front = PdfReader(io.BytesIO(front_bytes))
     r_back = PdfReader(io.BytesIO(back_bytes))
 
@@ -239,12 +260,7 @@ def impose_duplex_combined(
 
     out = io.BytesIO()
     writer.write(out)
-    data = out.getvalue()
-
-    if print_page_numbers:
-        data = _stamp_page_numbers(data, position=page_number_pos)
-
-    return data
+    return out.getvalue()
 
 
 def impose_duplex(
@@ -267,13 +283,26 @@ def get_booklet_passes(
     input_path: str,
     reverse_backs: bool = False,
     invert: Union[bool, Set[int]] = False,
+    presentation_mode: bool = False,
+    print_page_numbers: bool = False,
+    page_number_pos: str = "Bottom Right",
 ) -> Tuple[bytes, bytes]:
     """
     Generate two separate print streams for manual duplex booklet printing:
     - Pass 1: All Front sides of all sheets (Sheet 0 Front, Sheet 1 Front...)
     - Pass 2: All Back sides of all sheets (Sheet 0 Back, Sheet 1 Back...)
+
+    If presentation_mode is True:
+    Places 2 slides per sheet stacked Top and Bottom on a portrait sheet (ideal for 16:9/4:3 slides).
+    If presentation_mode is False:
+    Places 2 pages per sheet side by side on a landscape sheet.
     """
-    reader = _prepare_input_reader(input_path, invert=invert)
+    reader = _prepare_input_reader(
+        input_path,
+        invert=invert,
+        print_page_numbers=print_page_numbers,
+        page_number_pos=page_number_pos,
+    )
     pages = reader.pages
     n = len(pages)
     if n == 0:
@@ -284,62 +313,113 @@ def get_booklet_passes(
     pw = float(page0.mediabox.width)
     ph = float(page0.mediabox.height)
 
-    # Landscape sheet: width = 2 * half_width, height = ph (or standard proportional)
-    # If portrait (pw <= ph), sheet is landscape with width = ph * 1.414 or 2 * pw
-    if pw <= ph:
-        sheet_w = ph * 1.4142
-        sheet_h = ph
-    else:
-        sheet_w = pw * 2
-        sheet_h = ph
-
-    half_w = sheet_w / 2.0
-    scale = min(half_w / pw, sheet_h / ph)
-
     sheet_count = math.ceil(n / 4)
     total_booklet_pages = sheet_count * 4
 
     writer_front = PdfWriter()
     writer_back = PdfWriter()
 
-    def place_dual_pages(writer: PdfWriter, left_idx: Optional[int], right_idx: Optional[int]):
-        new_page = writer.add_blank_page(width=sheet_w, height=sheet_h)
-        # Left page
-        if left_idx is not None and 0 <= left_idx < n:
-            tx = (half_w - pw * scale) / 2.0
-            ty = (sheet_h - ph * scale) / 2.0
-            t = Transformation().scale(scale, scale).translate(tx=tx, ty=ty)
-            new_page.merge_transformed_page(pages[left_idx], t)
-        # Right page
-        if right_idx is not None and 0 <= right_idx < n:
-            tx = half_w + (half_w - pw * scale) / 2.0
-            ty = (sheet_h - ph * scale) / 2.0
-            t = Transformation().scale(scale, scale).translate(tx=tx, ty=ty)
-            new_page.merge_transformed_page(pages[right_idx], t)
+    if presentation_mode:
+        # Portrait sheet with slides stacked Top and Bottom
+        if pw >= ph:
+            sheet_w = pw
+            sheet_h = max(pw * 1.4142, ph * 2.0)
+        else:
+            sheet_w = pw
+            sheet_h = ph * 2.0
 
-    # Fronts (Pass 1)
-    for s in range(sheet_count):
-        lf = total_booklet_pages - 1 - 2 * s
-        rf = 2 * s
-        place_dual_pages(
-            writer_front,
-            lf if lf < n else None,
-            rf if rf < n else None,
-        )
+        half_h = sheet_h / 2.0
+        scale = min(sheet_w / pw, half_h / ph)
 
-    # Backs (Pass 2)
-    sheet_order = list(range(sheet_count))
-    if reverse_backs:
-        sheet_order.reverse()
+        def place_dual_pages(writer: PdfWriter, top_idx: Optional[int], bottom_idx: Optional[int]):
+            new_page = writer.add_blank_page(width=sheet_w, height=sheet_h)
+            # Top page (y in [half_h, sheet_h])
+            if top_idx is not None and 0 <= top_idx < n:
+                tx = (sheet_w - pw * scale) / 2.0
+                ty = half_h + (half_h - ph * scale) / 2.0
+                t = Transformation().scale(scale, scale).translate(tx=tx, ty=ty)
+                new_page.merge_transformed_page(pages[top_idx], t)
+            # Bottom page (y in [0, half_h])
+            if bottom_idx is not None and 0 <= bottom_idx < n:
+                tx = (sheet_w - pw * scale) / 2.0
+                ty = (half_h - ph * scale) / 2.0
+                t = Transformation().scale(scale, scale).translate(tx=tx, ty=ty)
+                new_page.merge_transformed_page(pages[bottom_idx], t)
 
-    for s in sheet_order:
-        lb = 2 * s + 1
-        rb = total_booklet_pages - 2 - 2 * s
-        place_dual_pages(
-            writer_back,
-            lb if lb < n else None,
-            rb if rb < n else None,
-        )
+        # Fronts (Pass 1)
+        for s in range(sheet_count):
+            lf = total_booklet_pages - 1 - 2 * s
+            rf = 2 * s
+            place_dual_pages(
+                writer_front,
+                lf if lf < n else None,
+                rf if rf < n else None,
+            )
+
+        # Backs (Pass 2)
+        sheet_order = list(range(sheet_count))
+        if reverse_backs:
+            sheet_order.reverse()
+
+        for s in sheet_order:
+            lb = 2 * s + 1
+            rb = total_booklet_pages - 2 - 2 * s
+            place_dual_pages(
+                writer_back,
+                lb if lb < n else None,
+                rb if rb < n else None,
+            )
+
+    else:
+        # Standard side-by-side booklet on landscape sheet
+        if pw <= ph:
+            sheet_w = ph * 1.4142
+            sheet_h = ph
+        else:
+            sheet_w = pw * 2
+            sheet_h = ph
+
+        half_w = sheet_w / 2.0
+        scale = min(half_w / pw, sheet_h / ph)
+
+        def place_dual_pages(writer: PdfWriter, left_idx: Optional[int], right_idx: Optional[int]):
+            new_page = writer.add_blank_page(width=sheet_w, height=sheet_h)
+            # Left page
+            if left_idx is not None and 0 <= left_idx < n:
+                tx = (half_w - pw * scale) / 2.0
+                ty = (sheet_h - ph * scale) / 2.0
+                t = Transformation().scale(scale, scale).translate(tx=tx, ty=ty)
+                new_page.merge_transformed_page(pages[left_idx], t)
+            # Right page
+            if right_idx is not None and 0 <= right_idx < n:
+                tx = half_w + (half_w - pw * scale) / 2.0
+                ty = (sheet_h - ph * scale) / 2.0
+                t = Transformation().scale(scale, scale).translate(tx=tx, ty=ty)
+                new_page.merge_transformed_page(pages[right_idx], t)
+
+        # Fronts (Pass 1)
+        for s in range(sheet_count):
+            lf = total_booklet_pages - 1 - 2 * s
+            rf = 2 * s
+            place_dual_pages(
+                writer_front,
+                lf if lf < n else None,
+                rf if rf < n else None,
+            )
+
+        # Backs (Pass 2)
+        sheet_order = list(range(sheet_count))
+        if reverse_backs:
+            sheet_order.reverse()
+
+        for s in sheet_order:
+            lb = 2 * s + 1
+            rb = total_booklet_pages - 2 - 2 * s
+            place_dual_pages(
+                writer_back,
+                lb if lb < n else None,
+                rb if rb < n else None,
+            )
 
     buf_front = io.BytesIO()
     writer_front.write(buf_front)
@@ -359,6 +439,7 @@ impose_booklet_passes = get_booklet_passes
 def impose_booklet(
     input_path: str,
     invert: Union[bool, Set[int]] = False,
+    presentation_mode: bool = False,
     print_page_numbers: bool = False,
     page_number_pos: str = "Bottom Right",
 ) -> bytes:
@@ -367,7 +448,12 @@ def impose_booklet(
     Sheet 0 Front, Sheet 0 Back, Sheet 1 Front, Sheet 1 Back...
     Uses uniform proportional 2-up scaling with zero aspect ratio distortion.
     """
-    reader = _prepare_input_reader(input_path, invert=invert)
+    reader = _prepare_input_reader(
+        input_path,
+        invert=invert,
+        print_page_numbers=print_page_numbers,
+        page_number_pos=page_number_pos,
+    )
     pages = reader.pages
     n = len(pages)
     if n == 0:
@@ -377,50 +463,81 @@ def impose_booklet(
     pw = float(page0.mediabox.width)
     ph = float(page0.mediabox.height)
 
-    if pw <= ph:
-        sheet_w = ph * 1.4142
-        sheet_h = ph
-    else:
-        sheet_w = pw * 2
-        sheet_h = ph
-
-    half_w = sheet_w / 2.0
-    scale = min(half_w / pw, sheet_h / ph)
-
     sheet_count = math.ceil(n / 4)
     total_booklet_pages = sheet_count * 4
 
     writer = PdfWriter()
 
-    def place_dual_pages(left_idx: Optional[int], right_idx: Optional[int]):
-        new_page = writer.add_blank_page(width=sheet_w, height=sheet_h)
-        if left_idx is not None and 0 <= left_idx < n:
-            tx = (half_w - pw * scale) / 2.0
-            ty = (sheet_h - ph * scale) / 2.0
-            t = Transformation().scale(scale, scale).translate(tx=tx, ty=ty)
-            new_page.merge_transformed_page(pages[left_idx], t)
-        if right_idx is not None and 0 <= right_idx < n:
-            tx = half_w + (half_w - pw * scale) / 2.0
-            ty = (sheet_h - ph * scale) / 2.0
-            t = Transformation().scale(scale, scale).translate(tx=tx, ty=ty)
-            new_page.merge_transformed_page(pages[right_idx], t)
+    if presentation_mode:
+        if pw >= ph:
+            sheet_w = pw
+            sheet_h = max(pw * 1.4142, ph * 2.0)
+        else:
+            sheet_w = pw
+            sheet_h = ph * 2.0
 
-    for s in range(sheet_count):
-        # Front
-        lf = total_booklet_pages - 1 - 2 * s
-        rf = 2 * s
-        place_dual_pages(lf if lf < n else None, rf if rf < n else None)
+        half_h = sheet_h / 2.0
+        scale = min(sheet_w / pw, half_h / ph)
 
-        # Back
-        lb = 2 * s + 1
-        rb = total_booklet_pages - 2 - 2 * s
-        place_dual_pages(lb if lb < n else None, rb if rb < n else None)
+        def place_dual_pages(top_idx: Optional[int], bottom_idx: Optional[int]):
+            new_page = writer.add_blank_page(width=sheet_w, height=sheet_h)
+            if top_idx is not None and 0 <= top_idx < n:
+                tx = (sheet_w - pw * scale) / 2.0
+                ty = half_h + (half_h - ph * scale) / 2.0
+                t = Transformation().scale(scale, scale).translate(tx=tx, ty=ty)
+                new_page.merge_transformed_page(pages[top_idx], t)
+            if bottom_idx is not None and 0 <= bottom_idx < n:
+                tx = (sheet_w - pw * scale) / 2.0
+                ty = (half_h - ph * scale) / 2.0
+                t = Transformation().scale(scale, scale).translate(tx=tx, ty=ty)
+                new_page.merge_transformed_page(pages[bottom_idx], t)
+
+        for s in range(sheet_count):
+            # Front
+            lf = total_booklet_pages - 1 - 2 * s
+            rf = 2 * s
+            place_dual_pages(lf if lf < n else None, rf if rf < n else None)
+
+            # Back
+            lb = 2 * s + 1
+            rb = total_booklet_pages - 2 - 2 * s
+            place_dual_pages(lb if lb < n else None, rb if rb < n else None)
+
+    else:
+        if pw <= ph:
+            sheet_w = ph * 1.4142
+            sheet_h = ph
+        else:
+            sheet_w = pw * 2
+            sheet_h = ph
+
+        half_w = sheet_w / 2.0
+        scale = min(half_w / pw, sheet_h / ph)
+
+        def place_dual_pages(left_idx: Optional[int], right_idx: Optional[int]):
+            new_page = writer.add_blank_page(width=sheet_w, height=sheet_h)
+            if left_idx is not None and 0 <= left_idx < n:
+                tx = (half_w - pw * scale) / 2.0
+                ty = (sheet_h - ph * scale) / 2.0
+                t = Transformation().scale(scale, scale).translate(tx=tx, ty=ty)
+                new_page.merge_transformed_page(pages[left_idx], t)
+            if right_idx is not None and 0 <= right_idx < n:
+                tx = half_w + (half_w - pw * scale) / 2.0
+                ty = (sheet_h - ph * scale) / 2.0
+                t = Transformation().scale(scale, scale).translate(tx=tx, ty=ty)
+                new_page.merge_transformed_page(pages[right_idx], t)
+
+        for s in range(sheet_count):
+            # Front
+            lf = total_booklet_pages - 1 - 2 * s
+            rf = 2 * s
+            place_dual_pages(lf if lf < n else None, rf if rf < n else None)
+
+            # Back
+            lb = 2 * s + 1
+            rb = total_booklet_pages - 2 - 2 * s
+            place_dual_pages(lb if lb < n else None, rb if rb < n else None)
 
     out = io.BytesIO()
     writer.write(out)
-    data = out.getvalue()
-
-    if print_page_numbers:
-        data = _stamp_page_numbers(data, position=page_number_pos)
-
-    return data
+    return out.getvalue()

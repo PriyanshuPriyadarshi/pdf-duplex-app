@@ -74,21 +74,54 @@ class MainWindow(QMainWindow):
         if not self.current_file_path or self.total_pages == 0:
             return
 
+        settings = self.settings_panel.get_settings()
         mode = self.settings_panel.get_current_mode()
         inverted_pages = self.sidebar.get_inverted_pages()
-        invert = inverted_pages if inverted_pages else False
-        if mode == "Normal":
-            pdf_bytes = imposer.impose_normal(self.current_file_path, invert=invert)
-            print_pdf(pdf_bytes, is_duplex=False)
+        if self.selected_page_indices and len(self.selected_page_indices) != self.total_pages:
+            invert = {i for i, orig_idx in enumerate(self.selected_page_indices) if orig_idx in inverted_pages}
         else:
-            if mode == "Manual Duplex":
-                p1, p2 = imposer.get_duplex_passes(self.current_file_path, invert=invert)
-            else:
-                p1, p2 = imposer.get_booklet_passes(self.current_file_path, invert=invert)
+            invert = inverted_pages if inverted_pages else False
 
-            print_pdf(p1, is_duplex=False)
-            if show_flip_prompt(self):
-                print_pdf(p2, is_duplex=False)
+        print_page_numbers = settings.get("print_page_numbers", False)
+        page_number_pos = settings.get("page_number_pos", "Bottom Right")
+        presentation_mode = settings.get("presentation_booklet", False)
+
+        pdf_path, is_temp = self._get_effective_pdf_path()
+        try:
+            if mode == "Normal":
+                pdf_bytes = imposer.impose_normal(
+                    pdf_path,
+                    invert=invert,
+                    print_page_numbers=print_page_numbers,
+                    page_number_pos=page_number_pos,
+                )
+                print_pdf(pdf_bytes, is_duplex=False)
+            else:
+                if mode == "Manual Duplex":
+                    p1, p2 = imposer.get_duplex_passes(
+                        pdf_path,
+                        invert=invert,
+                        print_page_numbers=print_page_numbers,
+                        page_number_pos=page_number_pos,
+                    )
+                else:
+                    p1, p2 = imposer.get_booklet_passes(
+                        pdf_path,
+                        invert=invert,
+                        presentation_mode=presentation_mode,
+                        print_page_numbers=print_page_numbers,
+                        page_number_pos=page_number_pos,
+                    )
+
+                print_pdf(p1, is_duplex=False)
+                if show_flip_prompt(self):
+                    print_pdf(p2, is_duplex=False)
+        finally:
+            if is_temp:
+                try:
+                    os.unlink(pdf_path)
+                except OSError:
+                    pass
 
     def handle_print(self):
         """Handle print action from menu or keyboard shortcut."""
@@ -271,11 +304,18 @@ class MainWindow(QMainWindow):
         self.center_preview.set_document(self.pdf_doc)
 
     def _on_mode_changed(self, mode: str):
+        settings = self.settings_panel.get_settings()
+        presentation = settings.get("presentation_booklet", False)
+        self.sidebar.set_presentation_mode(presentation)
+        self.center_preview.set_presentation_mode(presentation)
         self.sidebar.set_mode(mode)
         self.center_preview.set_mode(mode)
         self.status_bar.showMessage(f"Mode switched to: {mode}")
 
     def _on_options_changed(self, options: dict):
+        presentation = options.get("presentation_booklet", False)
+        self.sidebar.set_presentation_mode(presentation)
+        self.center_preview.set_presentation_mode(presentation)
         self.center_preview.update_preview()
 
     def _on_preview_navigated(self, sheet_idx: int, is_back: bool):
@@ -349,21 +389,30 @@ class MainWindow(QMainWindow):
             invert = {i for i, orig_idx in enumerate(self.selected_page_indices) if orig_idx in inverted_pages}
         else:
             invert = inverted_pages if inverted_pages else False
+
+        print_page_numbers = settings.get("print_page_numbers", False)
+        pos = settings.get("page_number_pos", "Bottom Right")
+        presentation_mode = settings.get("presentation_booklet", False)
+
         pdf_path, is_temp = self._get_effective_pdf_path()
         try:
             if mode == "Booklet":
                 pass1, pass2 = imposer.get_booklet_passes(
-                    pdf_path, reverse_backs=False, invert=invert
+                    pdf_path,
+                    reverse_backs=False,
+                    invert=invert,
+                    presentation_mode=presentation_mode,
+                    print_page_numbers=print_page_numbers,
+                    page_number_pos=pos,
                 )
             else:
                 pass1, pass2 = imposer.get_duplex_passes(
-                    pdf_path, reverse_backs=False, invert=invert
+                    pdf_path,
+                    reverse_backs=False,
+                    invert=invert,
+                    print_page_numbers=print_page_numbers,
+                    page_number_pos=pos,
                 )
-
-            if settings.get("print_page_numbers", False):
-                pos = settings.get("page_number_pos", "Bottom Right")
-                pass1 = imposer._stamp_page_numbers(pass1, pos)
-                pass2 = imposer._stamp_page_numbers(pass2, pos)
 
             return pass1, pass2
         finally:
@@ -407,6 +456,7 @@ class MainWindow(QMainWindow):
 
             print_page_numbers = settings.get("print_page_numbers", False)
             page_number_pos = settings.get("page_number_pos", "Bottom Right")
+            presentation_mode = settings.get("presentation_booklet", False)
 
             pdf_path, is_temp = self._get_effective_pdf_path()
             try:
@@ -414,6 +464,7 @@ class MainWindow(QMainWindow):
                     pdf_bytes = imposer.impose_booklet(
                         pdf_path,
                         invert=invert,
+                        presentation_mode=presentation_mode,
                         print_page_numbers=print_page_numbers,
                         page_number_pos=page_number_pos,
                     )
